@@ -1,0 +1,8 @@
+[package]
+name = "poker-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# ici tu peux ajouter des crates, par exemple rand pour mélanger les cartes
+rand = "0.8"
