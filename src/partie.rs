@@ -6,6 +6,7 @@ use crate::joueur::Joueur;
 use crate::utils::{demander, demander_u32};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 enum RangMain {
     CarteHaute,
     Paire,
@@ -59,6 +60,7 @@ pub struct Partie {
     paquet: Paquet,
     cartes_communes: Vec<Carte>,
     pot: u32,
+    contributions: Vec<u32>,
     dealer_idx: usize,
     small_blind: u32,
     big_blind: u32,
@@ -66,12 +68,13 @@ pub struct Partie {
 
 impl Partie {
     pub fn nouvelle(noms: Vec<String>, jetons_depart: u32, small_blind: u32, big_blind: u32) -> Self {
-        let joueurs = noms
+        let joueurs: Vec<Joueur> = noms
             .into_iter()
             .map(|nom| Joueur::nouveau(nom, jetons_depart))
             .collect();
 
         Self {
+            contributions: vec![0; joueurs.len()],
             joueurs,
             paquet: Paquet::nouveau(),
             cartes_communes: Vec::new(),
@@ -183,6 +186,7 @@ impl Partie {
         self.paquet.melanger();
         self.cartes_communes.clear();
         self.pot = 0;
+        self.contributions.fill(0);
         for joueur in &mut self.joueurs {
             joueur.main.clear();
             joueur.couche = joueur.jetons == 0;
@@ -222,9 +226,14 @@ impl Partie {
     }
 
     fn prelever_blind(&mut self, idx: usize, montant: u32) -> u32 {
+        self.investir(idx, montant)
+    }
+
+    fn investir(&mut self, idx: usize, montant: u32) -> u32 {
         let paye = self.joueurs[idx].jetons.min(montant);
         self.joueurs[idx].jetons -= paye;
         self.joueurs[idx].mise_tour += paye;
+        self.contributions[idx] += paye;
         self.pot += paye;
         paye
     }
@@ -269,7 +278,13 @@ impl Partie {
         println!("\n--- Tour de mise: {} ---", nom_tour);
 
         let mut mise_actuelle = mise_actuelle_depart;
+        let mut taille_relance_complete = self.big_blind.max(1);
+        let mut compteur_relances_completes = 0u32;
+
         let mut a_jouer = vec![false; self.joueurs.len()];
+        let mut a_deja_joue = vec![false; self.joueurs.len()];
+        let mut dernier_compteur_vu = vec![0u32; self.joueurs.len()];
+
         for (i, joueur) in self.joueurs.iter().enumerate() {
             if !joueur.couche && joueur.jetons > 0 {
                 a_jouer[i] = true;
@@ -294,8 +309,19 @@ impl Partie {
                 self.joueurs[idx].nom, self.joueurs[idx].jetons, self.joueurs[idx].mise_tour, to_call
             );
 
-            let action = self.demander_action(idx, to_call, mise_actuelle);
-            let mut relance = false;
+            let total_max = self.joueurs[idx].mise_tour + self.joueurs[idx].jetons;
+            let total_min_raise = if mise_actuelle == 0 {
+                self.big_blind
+            } else {
+                mise_actuelle + taille_relance_complete
+            };
+            let a_action_rouverte = !a_deja_joue[idx] || dernier_compteur_vu[idx] < compteur_relances_completes;
+            let peut_relancer = self.joueurs[idx].jetons > to_call
+                && total_max >= total_min_raise
+                && a_action_rouverte;
+
+            let action = self.demander_action(idx, to_call, peut_relancer);
+            let mut nouvelle_mise_totale: Option<u32> = None;
 
             match action.as_str() {
                 "f" => {
@@ -303,10 +329,7 @@ impl Partie {
                     println!("{} se couche.", self.joueurs[idx].nom);
                 }
                 "c" | "s" => {
-                    let paiement = self.joueurs[idx].jetons.min(to_call);
-                    self.joueurs[idx].jetons -= paiement;
-                    self.joueurs[idx].mise_tour += paiement;
-                    self.pot += paiement;
+                    let _ = self.investir(idx, to_call);
                     if to_call == 0 {
                         println!("{} check.", self.joueurs[idx].nom);
                     } else {
@@ -315,80 +338,81 @@ impl Partie {
                 }
                 "a" => {
                     let paiement = self.joueurs[idx].jetons;
-                    self.joueurs[idx].jetons = 0;
-                    self.joueurs[idx].mise_tour += paiement;
-                    self.pot += paiement;
+                    let _ = self.investir(idx, paiement);
                     println!("{} est all-in ({}).", self.joueurs[idx].nom, paiement);
+                    nouvelle_mise_totale = Some(self.joueurs[idx].mise_tour);
                 }
                 "r" => {
-                    let total_min = if to_call == 0 {
-                        (mise_actuelle + self.big_blind).max(self.big_blind)
-                    } else {
-                        mise_actuelle + self.big_blind
-                    };
-                    let total_max = self.joueurs[idx].mise_tour + self.joueurs[idx].jetons;
-                    if total_max < total_min {
+                    if total_max < total_min_raise {
                         println!(
                             "Relance impossible (minimum {}, maximum {}). Action annulee.",
-                            total_min, total_max
+                            total_min_raise, total_max
                         );
                         idx = (idx + 1) % self.joueurs.len();
                         continue;
                     }
                     let prompt = format!(
                         "Montant total de ta mise pour ce tour ({}..={}): ",
-                        total_min, total_max
+                        total_min_raise, total_max
                     );
-                    let total = demander_u32(&prompt, total_min, total_max);
+                    let total = demander_u32(&prompt, total_min_raise, total_max);
                     let paiement = total.saturating_sub(self.joueurs[idx].mise_tour);
-                    self.joueurs[idx].jetons -= paiement;
+                    let _ = self.investir(idx, paiement);
                     self.joueurs[idx].mise_tour = total;
-                    self.pot += paiement;
-                    mise_actuelle = total;
-                    relance = true;
                     println!("{} relance a {}.", self.joueurs[idx].nom, total);
+                    nouvelle_mise_totale = Some(total);
                 }
                 _ => {}
             }
 
+            a_deja_joue[idx] = true;
             a_jouer[idx] = false;
-            if relance {
-                for (i, joueur) in self.joueurs.iter().enumerate() {
-                    if i != idx && !joueur.couche && joueur.jetons > 0 {
-                        a_jouer[i] = true;
+
+            if let Some(nouvelle_mise) = nouvelle_mise_totale {
+                if nouvelle_mise > mise_actuelle {
+                    let augmentation = nouvelle_mise - mise_actuelle;
+                    let relance_complete = augmentation >= taille_relance_complete;
+                    mise_actuelle = nouvelle_mise;
+
+                    if relance_complete {
+                        taille_relance_complete = augmentation;
+                        compteur_relances_completes += 1;
+                    }
+
+                    for (i, joueur) in self.joueurs.iter().enumerate() {
+                        if i == idx || joueur.couche || joueur.jetons == 0 {
+                            continue;
+                        }
+                        if joueur.mise_tour < mise_actuelle {
+                            a_jouer[i] = true;
+                        }
                     }
                 }
             }
+            dernier_compteur_vu[idx] = compteur_relances_completes;
 
             idx = (idx + 1) % self.joueurs.len();
         }
     }
 
-    fn demander_action(&self, idx: usize, to_call: u32, mise_actuelle: u32) -> String {
+    fn demander_action(&self, idx: usize, to_call: u32, peut_relancer: bool) -> String {
         loop {
             let joueur = &self.joueurs[idx];
-            let total_max = joueur.mise_tour + joueur.jetons;
-            let total_min_raise = if to_call == 0 {
-                (mise_actuelle + self.big_blind).max(self.big_blind)
-            } else {
-                mise_actuelle + self.big_blind
-            };
-            let peut_relancer = joueur.jetons > to_call && total_max >= total_min_raise;
 
             let prompt = if to_call == 0 {
                 if peut_relancer {
-                    "Action [c=check, r=relance, f=fold]: "
+                    "Action [c=check, r=relance, a=all-in, f=fold]: "
                 } else {
-                    "Action [c=check, f=fold]: "
+                    "Action [c=check, a=all-in, f=fold]: "
                 }
             } else if joueur.jetons > to_call {
                 if peut_relancer {
-                    "Action [s=suivre, r=relance, f=fold]: "
+                    "Action [s=suivre, r=relance, a=all-in, f=fold]: "
                 } else {
-                    "Action [s=suivre, f=fold]: "
+                    "Action [s=suivre, a=all-in, f=fold]: "
                 }
             } else if joueur.jetons == to_call {
-                "Action [s=suivre(all-in), f=fold]: "
+                "Action [s=suivre(all-in), a=all-in, f=fold]: "
             } else {
                 "Action [a=all-in partiel, f=fold]: "
             };
@@ -401,7 +425,7 @@ impl Partie {
                 "f" => return "f".to_string(),
                 "c" if to_call == 0 => return "c".to_string(),
                 "s" if to_call > 0 && joueur.jetons >= to_call => return "s".to_string(),
-                "a" if to_call > 0 && joueur.jetons < to_call => return "a".to_string(),
+                "a" if joueur.jetons > 0 => return "a".to_string(),
                 "r" if peut_relancer => return "r".to_string(),
                 _ => println!("Action invalide."),
             }
@@ -436,7 +460,7 @@ impl Partie {
         println!("\n=== Showdown ===");
         self.afficher_communes();
 
-        let mut evaluations: Vec<(usize, MainEvaluee)> = Vec::new();
+        let mut evaluations: Vec<Option<MainEvaluee>> = vec![None; self.joueurs.len()];
         for (idx, joueur) in self.joueurs.iter().enumerate() {
             if joueur.couche {
                 continue;
@@ -446,43 +470,82 @@ impl Partie {
             cartes.extend(self.cartes_communes.iter().copied());
             let eval = evaluer_meilleure_main(&cartes);
             println!("{} -> {}", joueur.nom, eval.rang.libelle());
-            evaluations.push((idx, eval));
+            evaluations[idx] = Some(eval);
         }
 
-        if evaluations.is_empty() {
+        if evaluations.iter().all(|x| x.is_none()) {
             println!("Aucun joueur eligible au showdown.");
             return;
         }
 
-        let meilleure = evaluations
-            .iter()
-            .map(|(_, eval)| eval.clone())
-            .max()
-            .expect("Une meilleure main doit exister");
+        let mut restants = self.contributions.clone();
+        let mut total_distribue = 0u32;
 
-        let gagnants: Vec<usize> = evaluations
-            .iter()
-            .filter_map(|(idx, eval)| if *eval == meilleure { Some(*idx) } else { None })
-            .collect();
+        while let Some(niveau) = restants.iter().copied().filter(|&c| c > 0).min() {
+            let participants_pot: Vec<usize> = restants
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &c)| if c > 0 { Some(i) } else { None })
+                .collect();
+            let montant_pot = niveau * participants_pot.len() as u32;
 
-        let part = self.pot / gagnants.len() as u32;
-        let reste = self.pot % gagnants.len() as u32;
-        for (k, idx) in gagnants.iter().enumerate() {
-            let bonus = if (k as u32) < reste { 1 } else { 0 };
-            self.joueurs[*idx].jetons += part + bonus;
+            for idx in &participants_pot {
+                restants[*idx] -= niveau;
+            }
+
+            let eligibles: Vec<usize> = participants_pot
+                .iter()
+                .copied()
+                .filter(|&i| !self.joueurs[i].couche)
+                .collect();
+
+            if eligibles.is_empty() {
+                continue;
+            }
+
+            let meilleure = eligibles
+                .iter()
+                .filter_map(|&i| evaluations[i].as_ref())
+                .max()
+                .expect("Une meilleure main doit exister pour ce pot")
+                .clone();
+
+            let gagnants: Vec<usize> = eligibles
+                .iter()
+                .copied()
+                .filter(|&i| evaluations[i].as_ref() == Some(&meilleure))
+                .collect();
+
+            let part = montant_pot / gagnants.len() as u32;
+            let reste = montant_pot % gagnants.len() as u32;
+            for (k, idx) in gagnants.iter().enumerate() {
+                let bonus = if (k as u32) < reste { 1 } else { 0 };
+                self.joueurs[*idx].jetons += part + bonus;
+            }
+
+            let noms = gagnants
+                .iter()
+                .map(|&i| self.joueurs[i].nom.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!(
+                "Pot {} -> gagnant(s): {} ({})",
+                montant_pot,
+                noms,
+                meilleure.rang.libelle()
+            );
+
+            total_distribue += montant_pot;
         }
 
-        let noms = gagnants
-            .iter()
-            .map(|idx| self.joueurs[*idx].nom.clone())
-            .collect::<Vec<_>>()
-            .join(", ");
-        println!(
-            "Gagnant(s): {} avec {}. Pot distribue: {}",
-            noms,
-            meilleure.rang.libelle(),
-            self.pot
-        );
+        if total_distribue != self.pot {
+            println!(
+                "Alerte: distribution ({}) differente du pot ({}).",
+                total_distribue, self.pot
+            );
+        } else {
+            println!("Pot distribue: {}", self.pot);
+        }
         self.pot = 0;
     }
 
@@ -504,6 +567,11 @@ impl Partie {
             self.dealer_idx = next;
         }
     }
+}
+
+pub fn evaluer_holdem_pour_gui(cartes: &[Carte]) -> (u8, Vec<u8>, &'static str) {
+    let eval = evaluer_meilleure_main(cartes);
+    (eval.rang as u8, eval.departage, eval.rang.libelle())
 }
 
 fn evaluer_meilleure_main(cartes: &[Carte]) -> MainEvaluee {
