@@ -1,8 +1,9 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Couleur {
     Coeur,
     Carreau,
@@ -10,7 +11,7 @@ pub enum Couleur {
     Pique,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Valeur {
     Deux,
     Trois,
@@ -27,7 +28,7 @@ pub enum Valeur {
     As,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Carte {
     pub valeur: Valeur,
     pub couleur: Couleur,
