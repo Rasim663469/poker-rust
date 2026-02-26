@@ -525,17 +525,24 @@ impl CasinoApp {
         ui.label(format!("Street: {}", game.street.nom()));
 
         ui.add_space(8.0);
-        let table_height = 390.0;
-        let table_width = (ui.available_width() - 12.0).max(600.0);
+        let table_height = 470.0;
+        let table_width = (ui.available_width() - 4.0).max(760.0);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(table_width, table_height), egui::Sense::hover());
         dessiner_table(ui, rect, game);
 
         ui.add_space(10.0);
-        ui.monospace(format!(
-            "Pot: {} | Toi: {} jetons | Bot: {} jetons | Mise actuelle: {}",
-            game.pot, game.hero.jetons, game.bot.jetons, game.mise_actuelle
-        ));
-        ui.monospace(&game.message);
+        ui.group(|ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.strong(format!("Pot: {}", game.pot));
+                ui.separator();
+                ui.label(format!("Toi: {} jetons", game.hero.jetons));
+                ui.separator();
+                ui.label(format!("Bot: {} jetons", game.bot.jetons));
+                ui.separator();
+                ui.label(format!("Mise actuelle: {}", game.mise_actuelle));
+            });
+            ui.label(&game.message);
+        });
 
         ui.add_space(10.0);
         if game.street == Street::Terminee {
@@ -553,7 +560,7 @@ impl CasinoApp {
             return;
         }
 
-        ui.horizontal(|ui| {
+        ui.group(|ui| {
             if ui.button("Quitter la table").clicked() {
                 fermer_table = true;
             }
@@ -570,7 +577,10 @@ impl CasinoApp {
         }
 
         let to_call = game.to_call(TourJoueur::Hero);
-        ui.label(format!("Ton tour. Mise tour: {} | A payer: {}", game.hero.mise_tour, to_call));
+        ui.group(|ui| {
+            ui.label("Ton tour");
+            ui.label(format!("Mise tour: {} | A payer: {}", game.hero.mise_tour, to_call));
+        });
 
         ui.horizontal(|ui| {
             if ui.button("Fold").clicked() {
@@ -600,12 +610,16 @@ impl CasinoApp {
     }
 }
 
-fn dessiner_table(ui: &egui::Ui, rect: egui::Rect, game: &PokerGuiGame) {
+fn dessiner_table(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    game: &PokerGuiGame,
+) {
     let painter = ui.painter_at(rect);
     let bg = egui::Color32::from_rgb(13, 30, 24);
     painter.rect_filled(rect, 18.0, bg);
 
-    let table_rect = rect.shrink2(egui::vec2(24.0, 18.0));
+    let table_rect = rect.shrink2(egui::vec2(18.0, 12.0));
     painter.rect_filled(table_rect, 120.0, egui::Color32::from_rgb(18, 92, 64));
     painter.rect_stroke(
         table_rect,
@@ -615,18 +629,20 @@ fn dessiner_table(ui: &egui::Ui, rect: egui::Rect, game: &PokerGuiGame) {
     );
 
     let c = table_rect.center();
-    let board_origin = egui::pos2(c.x - 150.0, c.y - 36.0);
+    let board_origin = egui::pos2(c.x - 165.0, c.y - 20.0);
     for i in 0..5 {
-        let x = board_origin.x + i as f32 * 62.0;
-        let card_rect = egui::Rect::from_min_size(egui::pos2(x, board_origin.y), egui::vec2(54.0, 76.0));
+        let x = board_origin.x + i as f32 * 68.0;
+        let card_rect = egui::Rect::from_min_size(egui::pos2(x, board_origin.y), egui::vec2(58.0, 82.0));
         if let Some(card) = game.board.get(i) {
-            dessiner_carte(&painter, card_rect, &card.to_string(), true);
+            // Keep a neutral card face while remote image loads.
+            dessiner_carte(&painter, card_rect, "", true, None);
+            poser_image_carte(ui, card_rect.shrink(1.0), &card.image_url_api());
         } else {
-            dessiner_carte(&painter, card_rect, "", false);
+            dessiner_carte(&painter, card_rect, "", false, None);
         }
     }
 
-    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 62.0), egui::vec2(180.0, 46.0));
+    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 72.0), egui::vec2(210.0, 48.0));
     painter.rect_filled(pot_rect, 10.0, egui::Color32::from_rgb(11, 41, 30));
     painter.rect_stroke(
         pot_rect,
@@ -647,7 +663,7 @@ fn dessiner_table(ui: &egui::Ui, rect: egui::Rect, game: &PokerGuiGame) {
     let bot_name = if game.tour == TourJoueur::Bot { "Bot - son tour" } else { "Bot" };
     dessiner_joueur_zone(
         &painter,
-        egui::Rect::from_center_size(egui::pos2(c.x, table_rect.top() + 40.0), egui::vec2(280.0, 56.0)),
+        egui::Rect::from_center_size(egui::pos2(c.x, table_rect.top() + 32.0), egui::vec2(360.0, 54.0)),
         bot_name,
         game.bot.jetons,
         game.bot.mise_tour,
@@ -655,40 +671,42 @@ fn dessiner_table(ui: &egui::Ui, rect: egui::Rect, game: &PokerGuiGame) {
     let hero_name = if game.tour == TourJoueur::Hero { "Toi - ton tour" } else { "Toi" };
     dessiner_joueur_zone(
         &painter,
-        egui::Rect::from_center_size(egui::pos2(c.x, table_rect.bottom() - 40.0), egui::vec2(280.0, 56.0)),
+        egui::Rect::from_center_size(egui::pos2(c.x, table_rect.bottom() - 32.0), egui::vec2(360.0, 54.0)),
         hero_name,
         game.hero.jetons,
         game.hero.mise_tour,
     );
 
-    let bot_cards_y = table_rect.top() + 78.0;
+    let bot_cards_y = table_rect.top() + 80.0;
     for i in 0..2 {
         let card_rect = egui::Rect::from_min_size(
-            egui::pos2(c.x - 62.0 + i as f32 * 68.0, bot_cards_y),
-            egui::vec2(58.0, 84.0),
+            egui::pos2(c.x - 72.0 + i as f32 * 80.0, bot_cards_y),
+            egui::vec2(64.0, 92.0),
         );
         let reveal = game.street == Street::Terminee || game.street == Street::Showdown;
         if reveal {
             if let Some(card) = game.bot.main.get(i) {
-                dessiner_carte(&painter, card_rect, &card.to_string(), true);
+                dessiner_carte(&painter, card_rect, "", true, None);
+                poser_image_carte(ui, card_rect.shrink(1.0), &card.image_url_api());
             } else {
-                dessiner_carte(&painter, card_rect, "", false);
+                dessiner_carte(&painter, card_rect, "", false, None);
             }
         } else {
-            dessiner_carte(&painter, card_rect, "", false);
+            dessiner_carte(&painter, card_rect, "", false, None);
         }
     }
 
-    let hero_cards_y = table_rect.bottom() - 164.0;
+    let hero_cards_y = table_rect.bottom() - 128.0;
     for i in 0..2 {
         let card_rect = egui::Rect::from_min_size(
-            egui::pos2(c.x - 62.0 + i as f32 * 68.0, hero_cards_y),
-            egui::vec2(58.0, 84.0),
+            egui::pos2(c.x - 72.0 + i as f32 * 80.0, hero_cards_y),
+            egui::vec2(64.0, 92.0),
         );
         if let Some(card) = game.hero.main.get(i) {
-            dessiner_carte(&painter, card_rect, &card.to_string(), true);
+            dessiner_carte(&painter, card_rect, "", true, None);
+            poser_image_carte(ui, card_rect.shrink(1.0), &card.image_url_api());
         } else {
-            dessiner_carte(&painter, card_rect, "", false);
+            dessiner_carte(&painter, card_rect, "", false, None);
         }
     }
 }
@@ -708,15 +726,21 @@ fn dessiner_joueur_zone(
         egui::StrokeKind::Outside,
     );
     painter.text(
-        egui::pos2(rect.left() + 12.0, rect.center().y),
-        egui::Align2::LEFT_CENTER,
-        format!("{}  |  Stack: {}  |  Mise: {}", nom, jetons, mise_tour),
-        egui::FontId::proportional(16.0),
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        format!("{}   |   Stack: {}   |   Mise: {}", nom, jetons, mise_tour),
+        egui::FontId::proportional(18.0),
         egui::Color32::from_rgb(220, 232, 227),
     );
 }
 
-fn dessiner_carte(painter: &egui::Painter, rect: egui::Rect, texte: &str, face_up: bool) {
+fn dessiner_carte(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    texte: &str,
+    face_up: bool,
+    _texture_id: Option<egui::TextureId>,
+) {
     if face_up {
         painter.rect_filled(rect, 8.0, egui::Color32::from_rgb(249, 249, 245));
         painter.rect_stroke(
@@ -749,6 +773,11 @@ fn dessiner_carte(painter: &egui::Painter, rect: egui::Rect, texte: &str, face_u
     }
 }
 
+fn poser_image_carte(ui: &mut egui::Ui, rect: egui::Rect, url: &str) {
+    let img = egui::Image::from_uri(url).fit_to_exact_size(rect.size());
+    ui.put(rect, img);
+}
+
 fn dessiner_jetons(painter: &egui::Painter, center: egui::Pos2, n: usize) {
     for i in 0..n {
         let y = center.y - i as f32 * 6.0;
@@ -761,13 +790,16 @@ fn dessiner_jetons(painter: &egui::Painter, center: egui::Pos2, n: usize) {
 
 pub fn lancer_gui() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([980.0, 640.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1180.0, 820.0]),
         ..Default::default()
     };
 
     eframe::run_native(
         "Casino Rust",
         options,
-        Box::new(|_cc| Ok(Box::new(CasinoApp::default()))),
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::new(CasinoApp::default()))
+        }),
     )
 }
