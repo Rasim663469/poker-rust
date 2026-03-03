@@ -1,0 +1,6 @@
+# Workaround pour le bug ICE du compilateur rustc 1.93.1
+# (crash dans check_mod_deathness / warn_multiple sur dead-code lint)
+# À supprimer lors d'une mise à jour vers rustc > 1.93.1
+
+[build]
+rustflags = ["-A", "dead-code", "-A", "unused"]

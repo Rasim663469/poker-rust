@@ -5,9 +5,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::carte::{Carte, Paquet};
 use crate::joueur::Joueur;
-use crate::utils::{demander, demander_u32};
+use crate::utils::demander;
 use crate::communication::{MessageClient,MessageServeur,ActionJoueur};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 enum RangMain {
     CarteHaute,
     Paire,
@@ -19,8 +21,6 @@ enum RangMain {
     Carre,
     QuinteFlush,
 }
-
-
 
 impl RangMain {
     fn libelle(self) -> &'static str {
@@ -43,6 +43,7 @@ struct MainEvaluee {
     rang: RangMain,
     departage: Vec<u8>,
 }
+
 impl MainEvaluee {
     fn departage_en_texte(&self) -> String {
         self.departage.iter()
@@ -64,8 +65,6 @@ impl Ord for MainEvaluee {
             .cmp(&other.rang)
             .then_with(|| self.departage.cmp(&other.departage))
     }
-
-    
 }
 
 impl PartialOrd for MainEvaluee {
@@ -80,25 +79,24 @@ pub struct Partie {
     paquet: Paquet,
     cartes_communes: Vec<Carte>,
     pot: u32,
+    contributions: Vec<u32>,
     dealer_idx: usize,
     small_blind: u32,
     big_blind: u32,
 }
 
-
-
-
 impl Partie {
     pub fn nouvelle(noms: Vec<String>, jetons_depart: u32, small_blind: u32, big_blind: u32, sockets : Vec<TcpStream>) -> Self {
-        let joueurs = noms
+        let joueurs: Vec<Joueur> = noms
             .into_iter()
             .map(|nom| Joueur::nouveau(nom, jetons_depart))
             .collect();
 
         Self {
+            contributions: vec![0; joueurs.len()],
             joueurs,
             sockets,
-            paquet: Paquet::nouveau(),
+            paquet: tokio::task::block_in_place(|| Paquet::nouveau()),
             cartes_communes: Vec::new(),
             pot: 0,
             dealer_idx: 0,
@@ -107,12 +105,13 @@ impl Partie {
         }
     }
 
-    //Diffuse un message a tout le monde
     pub async fn diffuser(&mut self, message: &MessageServeur) -> tokio::io::Result<()> {
         let data = serde_json::to_vec(message).expect("Erreur sérialisation broadcast");
 
         for socket in &mut self.sockets {
-            socket.write_all(&data).await?;
+            if let Err(e) = socket.write_all(&data).await {
+                eprintln!("[WARN] Diffusion échouée pour un joueur (déconnecté ?) : {}", e);
+            }
         }
         Ok(())
     }
@@ -175,8 +174,9 @@ impl Partie {
         self.reinitialiser_mises_tour();
 
         self.bruler_une_carte();
-        self.distribuer_communes(3).await?;
+        self.distribuer_communes(3);
         println!("\n=== Flop ===");
+        self.afficher_communes();
         self.diffuser_table().await?;
         let start_postflop = self
             .prochain_participant_apres(self.dealer_idx)
@@ -189,8 +189,9 @@ impl Partie {
         self.reinitialiser_mises_tour();
 
         self.bruler_une_carte();
-        self.distribuer_communes(1).await?;
+        self.distribuer_communes(1);
         println!("\n=== Turn ===");
+        self.afficher_communes();
         self.diffuser_table().await?;
         self.tour_mises("Turn", start_postflop, 0).await?;
         if self.main_terminee_par_abandon().await? {
@@ -200,8 +201,9 @@ impl Partie {
         self.reinitialiser_mises_tour();
 
         self.bruler_une_carte();
-        self.distribuer_communes(1).await?;
+        self.distribuer_communes(1);
         println!("\n=== River ===");
+        self.afficher_communes();
         self.diffuser_table().await?;
         self.tour_mises("River", start_postflop, 0).await?;
         if self.main_terminee_par_abandon().await? {
@@ -216,10 +218,13 @@ impl Partie {
     }
 
     fn preparer_manche(&mut self) {
-        self.paquet = Paquet::nouveau();
-        self.paquet.melanger();
+        tokio::task::block_in_place(|| {
+            self.paquet = Paquet::nouveau();
+            self.paquet.melanger();
+        });
         self.cartes_communes.clear();
         self.pot = 0;
+        self.contributions.fill(0);
         for joueur in &mut self.joueurs {
             joueur.main.clear();
             joueur.couche = joueur.jetons == 0;
@@ -259,39 +264,58 @@ impl Partie {
     }
 
     fn prelever_blind(&mut self, idx: usize, montant: u32) -> u32 {
+        self.investir(idx, montant)
+    }
+
+    fn investir(&mut self, idx: usize, montant: u32) -> u32 {
         let paye = self.joueurs[idx].jetons.min(montant);
         self.joueurs[idx].jetons -= paye;
         self.joueurs[idx].mise_tour += paye;
+        self.contributions[idx] += paye;
         self.pot += paye;
         paye
     }
 
     pub async fn distribuer_pocket(&mut self) -> tokio::io::Result<()> {
-    for i in 0..self.joueurs.len() {
-        if self.joueurs[i].jetons > 0 {
-            let c1 = self.paquet.tirer_carte().unwrap();
-            let c2 = self.paquet.tirer_carte().unwrap();
-            self.joueurs[i].main = vec![c1, c2];
-
-            let msg = MessageServeur::MesCartes { cartes: self.joueurs[i].main.clone() };
-            let data = serde_json::to_vec(&msg).unwrap();
-            self.sockets[i].write_all(&data).await?; 
+        for _ in 0..2 {
+            let len = self.joueurs.len();
+            for i in 0..len {
+                if self.joueurs[i].jetons > 0 || self.joueurs[i].mise_tour > 0 {
+                    let carte_option = tokio::task::block_in_place(|| self.paquet.tirer_carte());
+                    if let Some(carte) = carte_option {
+                        self.joueurs[i].main.push(carte);
+                    }
+                }
+            }
         }
-    }
-    Ok(())
-}
-
-    fn bruler_une_carte(&mut self) {
-        let _ = self.paquet.tirer_carte();
-    }
-
-    pub async fn distribuer_communes(&mut self, n: usize) -> tokio::io::Result<()>{
-        for _ in 0..n {
-            if let Some(carte) = self.paquet.tirer_carte() {
-                self.cartes_communes.push(carte);
+        
+        for i in 0..self.joueurs.len() {
+            if self.joueurs[i].jetons > 0 || self.joueurs[i].mise_tour > 0 {
+                let msg = MessageServeur::MesCartes { cartes: self.joueurs[i].main.clone() };
+                let data = serde_json::to_vec(&msg).unwrap();
+                if let Err(e) = self.sockets[i].write_all(&data).await {
+                    eprintln!("[WARN] Impossible d'envoyer les cartes à {} : {}", self.joueurs[i].nom, e);
+                    self.joueurs[i].couche = true;
+                }
             }
         }
         Ok(())
+    }
+
+    fn bruler_une_carte(&mut self) {
+        tokio::task::block_in_place(|| {
+            let _ = self.paquet.tirer_carte();
+        });
+    }
+
+    fn distribuer_communes(&mut self, n: usize) {
+        tokio::task::block_in_place(|| {
+            for _ in 0..n {
+                if let Some(carte) = self.paquet.tirer_carte() {
+                    self.cartes_communes.push(carte);
+                }
+            }
+        });
     }
 
     pub async fn diffuser_table(&mut self) -> tokio::io::Result<()> {
@@ -302,11 +326,28 @@ impl Partie {
         self.diffuser(&msg).await
     }
 
+    fn afficher_communes(&self) {
+        let cartes = self
+            .cartes_communes
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("Cartes communes: {}", cartes);
+        println!("Pot: {}", self.pot);
+    }
 
-    pub async fn tour_mises(&mut self, nom_tour: &str, start_idx: usize, mut mise_actuelle: u32) -> tokio::io::Result<()> {
+    pub async fn tour_mises(&mut self, nom_tour: &str, start_idx: usize, mise_actuelle_depart: u32) -> tokio::io::Result<()> {
         println!("\n--- Tour de mise: {} ---", nom_tour);
 
+        let mut mise_actuelle = mise_actuelle_depart;
+        let mut taille_relance_complete = self.big_blind.max(1);
+        let mut compteur_relances_completes = 0u32;
+
         let mut a_jouer = vec![false; self.joueurs.len()];
+        let mut a_deja_joue = vec![false; self.joueurs.len()];
+        let mut dernier_compteur_vu = vec![0u32; self.joueurs.len()];
+
         for (i, joueur) in self.joueurs.iter().enumerate() {
             if !joueur.couche && joueur.jetons > 0 {
                 a_jouer[i] = true;
@@ -315,6 +356,10 @@ impl Partie {
 
         let mut idx = start_idx;
         while self.nb_actifs_non_couches() > 1 && a_jouer.iter().any(|&b| b) {
+            if idx >= self.joueurs.len() {
+                idx = 0;
+            }
+
             if !a_jouer[idx] || self.joueurs[idx].couche || self.joueurs[idx].jetons == 0 {
                 idx = (idx + 1) % self.joueurs.len();
                 continue;
@@ -322,90 +367,136 @@ impl Partie {
 
             let to_call = mise_actuelle.saturating_sub(self.joueurs[idx].mise_tour);
             
+            let total_max = self.joueurs[idx].mise_tour + self.joueurs[idx].jetons;
+            let total_min_raise = if mise_actuelle == 0 {
+                self.big_blind
+            } else {
+                mise_actuelle + taille_relance_complete
+            };
+            let a_action_rouverte = !a_deja_joue[idx] || dernier_compteur_vu[idx] < compteur_relances_completes;
+            let peut_relancer = self.joueurs[idx].jetons > to_call
+                && total_max >= total_min_raise
+                && a_action_rouverte;
+            
             let msg_demande = MessageServeur::DemanderAction { 
                 to_call, 
-                peut_relancer: self.joueurs[idx].jetons > to_call,
+                peut_relancer,
                 jetons_restants: self.joueurs[idx].jetons
             };
             
             let data = serde_json::to_vec(&msg_demande).unwrap();
-            self.sockets[idx].write_all(&data).await?;
+            if let Err(e) = self.sockets[idx].write_all(&data).await {
+                eprintln!("[WARN] Impossible de contacter {} : {} → fold automatique", self.joueurs[idx].nom, e);
+                self.joueurs[idx].couche = true;
+                a_jouer[idx] = false;
+                idx = (idx + 1) % self.joueurs.len();
+                continue;
+            }
 
-            let mut tampon = [0; 1024];
-            let n = self.sockets[idx].read(&mut tampon).await?;
-            let reponse: MessageClient = serde_json::from_slice(&tampon[..n]).unwrap();
+            let mut tampon = [0u8; 4096];
+            let lecture = self.sockets[idx].read(&mut tampon).await;
+            let nb_octets = match lecture {
+                Ok(0) => None,
+                Ok(n) => Some(n),
+                Err(_) => None,
+            };
+            if nb_octets.is_none() {
+                eprintln!("[WARN] {} injoignable ou déconnecté → fold automatique", self.joueurs[idx].nom);
+                self.joueurs[idx].couche = true;
+                a_jouer[idx] = false;
+                idx = (idx + 1) % self.joueurs.len();
+                continue;
+            }
+            let n = nb_octets.unwrap();
+
+            let parsed: Option<MessageClient> = serde_json::from_slice(&tampon[..n]).ok();
+            if parsed.is_none() {
+                eprintln!("[WARN] Message invalide de {} → fold automatique", self.joueurs[idx].nom);
+                self.joueurs[idx].couche = true;
+                a_jouer[idx] = false;
+                idx = (idx + 1) % self.joueurs.len();
+                continue;
+            }
+            let reponse = parsed.unwrap();
+
+            let mut nouvelle_mise_totale: Option<u32> = None;
 
             if let MessageClient::Action(action) = reponse {
                 let nom_joueur = self.joueurs[idx].nom.clone();
                 match action {
                     ActionJoueur::Fold => {
                         self.joueurs[idx].couche = true;
-                        a_jouer[idx] = false;
-                        self.diffuser(&MessageServeur::Bienvenue { message: format!("\n[INFO ACTION] {} s'est couché.\n", self.joueurs[idx].nom.clone()) }).await?;
+                        self.diffuser(&MessageServeur::Bienvenue { message: format!("\n[INFO ACTION] {} s'est couché.\n", nom_joueur) }).await?;
                     }
                     ActionJoueur::Call => {
                         let paiement = self.joueurs[idx].jetons.min(to_call);
-                        self.joueurs[idx].jetons -= paiement;
-                        self.joueurs[idx].mise_tour += paiement;
-                        self.pot += paiement;
-                        a_jouer[idx] = false;
+                        let _ = self.investir(idx, paiement);
                         let msg = if to_call == 0 {
                             format!("\n[INFO ACTION] {} a check.\n", nom_joueur)
                         } else {
                             format!("\n[INFO ACTION] {} a suivi ({} jetons).\n", nom_joueur, paiement)
                         };
                         self.diffuser(&MessageServeur::Bienvenue { message: msg }).await?;
-
                     }
                     ActionJoueur::Raise(total) => {
                         let paiement = total.saturating_sub(self.joueurs[idx].mise_tour);
-                        self.joueurs[idx].jetons -= paiement;
-                        self.joueurs[idx].mise_tour = total;
-                        self.pot += paiement;
-                        mise_actuelle = total;
-                        let msg = format!("\n[INFO ACTION] {} a relancé à {} jetons.\n", nom_joueur, total);
-                        
-                        for i in 0..a_jouer.len() {
-                            if i != idx && !self.joueurs[i].couche && self.joueurs[i].jetons > 0 {
-                                a_jouer[i] = true;
-                            }
-                        }
-                        a_jouer[idx] = false;
+                        let _ = self.investir(idx, paiement);
+                        nouvelle_mise_totale = Some(total);
+                        self.diffuser(&MessageServeur::Bienvenue { message: format!("\n[INFO ACTION] {} a relancé à {} jetons.\n", nom_joueur, total) }).await?;
                     }
                     _ => {}
                 }
             }
+
+            a_deja_joue[idx] = true;
+            a_jouer[idx] = false;
+
+            if let Some(nouvelle_mise) = nouvelle_mise_totale {
+                if nouvelle_mise > mise_actuelle {
+                    let augmentation = nouvelle_mise - mise_actuelle;
+                    let relance_complete = augmentation >= taille_relance_complete;
+                    mise_actuelle = nouvelle_mise;
+
+                    if relance_complete {
+                        taille_relance_complete = augmentation;
+                        compteur_relances_completes += 1;
+                    }
+
+                    for (i, joueur) in self.joueurs.iter().enumerate() {
+                        if i == idx || joueur.couche || joueur.jetons == 0 {
+                            continue;
+                        }
+                        if joueur.mise_tour < mise_actuelle {
+                            a_jouer[i] = true;
+                        }
+                    }
+                }
+            }
+            dernier_compteur_vu[idx] = compteur_relances_completes;
+
             idx = (idx + 1) % self.joueurs.len();
         }
         Ok(())
     }
     
-
-    fn demander_action(&self, idx: usize, to_call: u32, mise_actuelle: u32) -> String {
+    fn demander_action(&self, idx: usize, to_call: u32, peut_relancer: bool) -> String {
         loop {
             let joueur = &self.joueurs[idx];
-            let total_max = joueur.mise_tour + joueur.jetons;
-            let total_min_raise = if to_call == 0 {
-                (mise_actuelle + self.big_blind).max(self.big_blind)
-            } else {
-                mise_actuelle + self.big_blind
-            };
-            let peut_relancer = joueur.jetons > to_call && total_max >= total_min_raise;
 
             let prompt = if to_call == 0 {
                 if peut_relancer {
-                    "Action [c=check, r=relance, f=fold]: "
+                    "Action [c=check, r=relance, a=all-in, f=fold]: "
                 } else {
-                    "Action [c=check, f=fold]: "
+                    "Action [c=check, a=all-in, f=fold]: "
                 }
             } else if joueur.jetons > to_call {
                 if peut_relancer {
-                    "Action [s=suivre, r=relance, f=fold]: "
+                    "Action [s=suivre, r=relance, a=all-in, f=fold]: "
                 } else {
-                    "Action [s=suivre, f=fold]: "
+                    "Action [s=suivre, a=all-in, f=fold]: "
                 }
             } else if joueur.jetons == to_call {
-                "Action [s=suivre(all-in), f=fold]: "
+                "Action [s=suivre(all-in), a=all-in, f=fold]: "
             } else {
                 "Action [a=all-in partiel, f=fold]: "
             };
@@ -418,7 +509,7 @@ impl Partie {
                 "f" => return "f".to_string(),
                 "c" if to_call == 0 => return "c".to_string(),
                 "s" if to_call > 0 && joueur.jetons >= to_call => return "s".to_string(),
-                "a" if to_call > 0 && joueur.jetons < to_call => return "a".to_string(),
+                "a" if joueur.jetons > 0 => return "a".to_string(),
                 "r" if peut_relancer => return "r".to_string(),
                 _ => println!("Action invalide."),
             }
@@ -431,33 +522,25 @@ impl Partie {
         }
     }
 
-    // Dans src/partie.rs
-
 pub async fn main_terminee_par_abandon(&mut self) -> tokio::io::Result<bool> {
     if self.nb_actifs_non_couches() != 1 {
         return Ok(false);
     }
 
-    let gagnant_idx = self
+    let gagnant = self
         .joueurs
         .iter()
         .enumerate()
         .find_map(|(i, j)| if !j.couche { Some(i) } else { None });
 
-    if let Some(idx) = gagnant_idx {
-        let nom_gagnant = self.joueurs[idx].nom.clone();
-        let montant = self.pot;
-
-        self.joueurs[idx].jetons += self.pot;
-        self.pot = 0;
-
+    if let Some(idx) = gagnant {
         let annonce = format!(
             "\nTous les autres joueurs se sont couchés. {} gagne le pot de {} jetons.",
-            nom_gagnant, montant
+            self.joueurs[idx].nom, self.pot
         );
-        
+        self.joueurs[idx].jetons += self.pot;
+        self.pot = 0;
         self.diffuser(&MessageServeur::Bienvenue { message: annonce }).await?;
-        
     }
 
     Ok(true)
@@ -467,44 +550,94 @@ pub async fn main_terminee_par_abandon(&mut self) -> tokio::io::Result<bool> {
         self.diffuser(&MessageServeur::Bienvenue { 
             message: "\n=== SHOWDOWN ===".to_string() 
         }).await?;
+        self.afficher_communes();
         self.diffuser_table().await?;
 
-        let mut evaluations: Vec<(usize, MainEvaluee)> = Vec::new();
-
+        let mut evaluations: Vec<Option<MainEvaluee>> = vec![None; self.joueurs.len()];
         for idx in 0..self.joueurs.len() {
-            if self.joueurs[idx].couche { continue; }
-
-            let mut sept_cartes = Vec::with_capacity(7);
-            sept_cartes.extend(self.joueurs[idx].main.iter().cloned()); 
-            sept_cartes.extend(self.cartes_communes.iter().cloned());
-
-            let eval = evaluer_meilleure_main(&sept_cartes);
+            if self.joueurs[idx].couche {
+                continue;
+            }
+            let mut cartes = Vec::with_capacity(7);
+            cartes.extend(self.joueurs[idx].main.iter().copied());
+            cartes.extend(self.cartes_communes.iter().copied());
+            let eval = evaluer_meilleure_main(&cartes);
             
             let msg = format!("{} montre : {} (Kickers: {})", 
                 self.joueurs[idx].nom, 
                 eval.rang.libelle(), 
                 eval.departage_en_texte()
             );
-            self.diffuser(&MessageServeur::Bienvenue { message: msg }).await?;
             
-            evaluations.push((idx, eval));
+            self.diffuser(&MessageServeur::Bienvenue { message: msg }).await?;
+            evaluations[idx] = Some(eval);
         }
 
-        if evaluations.is_empty() { return Ok(()); }
-
-        let meilleure = evaluations.iter().map(|(_, e)| e.clone()).max().unwrap();
-        let gagnants: Vec<usize> = evaluations.iter()
-            .filter(|(_, e)| *e == meilleure)
-            .map(|(i, _)| *i).collect();
-
-        let part = self.pot / gagnants.len() as u32;
-        for &idx in &gagnants {
-            self.joueurs[idx].jetons += part;
+        if evaluations.iter().all(|x| x.is_none()) {
+            return Ok(());
         }
 
-        let noms = gagnants.iter().map(|&i| self.joueurs[i].nom.clone()).collect::<Vec<_>>().join(", ");
-        let annonce = format!("\n{} gagne(nt) le pot de {} jetons !", noms, self.pot);
-        self.diffuser(&MessageServeur::Bienvenue { message: annonce }).await?;
+        let mut restants = self.contributions.clone();
+        let mut _total_distribue = 0u32;
+
+        while let Some(niveau) = restants.iter().copied().filter(|&c| c > 0).min() {
+            let participants_pot: Vec<usize> = restants
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &c)| if c > 0 { Some(i) } else { None })
+                .collect();
+            let montant_pot = niveau * participants_pot.len() as u32;
+
+            for idx in &participants_pot {
+                restants[*idx] -= niveau;
+            }
+
+            let eligibles: Vec<usize> = participants_pot
+                .iter()
+                .copied()
+                .filter(|&i| !self.joueurs[i].couche)
+                .collect();
+
+            if eligibles.is_empty() {
+                continue;
+            }
+
+            let meilleure = eligibles
+                .iter()
+                .filter_map(|&i| evaluations[i].as_ref())
+                .max()
+                .expect("Une meilleure main doit exister pour ce pot")
+                .clone();
+
+            let gagnants: Vec<usize> = eligibles
+                .iter()
+                .copied()
+                .filter(|&i| evaluations[i].as_ref() == Some(&meilleure))
+                .collect();
+
+            let part = montant_pot / gagnants.len() as u32;
+            let reste = montant_pot % gagnants.len() as u32;
+            for (k, idx) in gagnants.iter().enumerate() {
+                let bonus = if (k as u32) < reste { 1 } else { 0 };
+                self.joueurs[*idx].jetons += part + bonus;
+            }
+
+            let noms = gagnants
+                .iter()
+                .map(|&i| self.joueurs[i].nom.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+                
+            let msg_gagnant = format!(
+                "Pot {} -> gagnant(s): {} ({})",
+                montant_pot,
+                noms,
+                meilleure.rang.libelle()
+            );
+            self.diffuser(&MessageServeur::Bienvenue { message: msg_gagnant }).await?;
+
+            _total_distribue += montant_pot;
+        }
 
         self.pot = 0;
         Ok(())
@@ -528,6 +661,11 @@ pub async fn main_terminee_par_abandon(&mut self) -> tokio::io::Result<bool> {
             self.dealer_idx = next;
         }
     }
+}
+
+pub fn evaluer_holdem_pour_gui(cartes: &[Carte]) -> (u8, Vec<u8>, &'static str) {
+    let eval = evaluer_meilleure_main(cartes);
+    (eval.rang as u8, eval.departage, eval.rang.libelle())
 }
 
 fn evaluer_meilleure_main(cartes: &[Carte]) -> MainEvaluee {

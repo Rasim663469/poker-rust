@@ -1,4 +1,3 @@
-// Dans src/communication.rs
 use serde::{Serialize, Deserialize};
 use crate::carte::Carte;
 
@@ -8,13 +7,13 @@ pub enum ActionJoueur {
     Check,
     Call,
     Raise(u32),
+    ConfigurerPartie { nb_joueurs: u32, jetons: u32 }, 
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum MessageClient {
     Connexion { pseudo: String },
-    Action(ActionJoueur), 
-    Info{info:String},
+    Action(ActionJoueur),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,6 +21,7 @@ pub enum MessageServeur {
     Bienvenue { message: String },
     MesCartes { cartes: Vec<Carte> },
     MajTable { pot: u32, cartes_communes: Vec<Carte> },
-    DemanderAction { to_call: u32, peut_relancer: bool,jetons_restants: u32, }, 
+    DemanderAction { to_call: u32, peut_relancer: bool, jetons_restants: u32 }, 
     AnnonceAction { nom: String, action: String },
+    DemanderConfiguration, 
 }

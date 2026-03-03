@@ -2,9 +2,11 @@ use crate::carte::Carte;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize)]
+
+
 pub struct Joueur {
     pub nom: String,
-    pub main: Vec<Carte>, // 2 pocket cards en Hold'em
+    pub main: Vec<Carte>,
     pub jetons: u32,
     pub couche: bool,
     pub mise_tour: u32,
