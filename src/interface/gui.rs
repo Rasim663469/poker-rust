@@ -2,11 +2,21 @@ use eframe::egui;
 use crate::carte::Carte;
 use crate::communication::{MessageServeur, ActionJoueur};
 
+// Écrans de navigation 
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EcranCasino {
-    Lobby,
+enum Ecran {
+    // Menu d'accueil général (liste des jeux disponibles)
+    MenuPrincipal,
+    // Lobby spécifique au Poker : choisir créer ou rejoindre
+    PokerLobby,
+    // Écran de configuration avant de créer une partie (nombre joueurs, jetons)
+    PokerCreer,
+    // Jeu en cours
     Poker,
 }
+
+// État réseau partagé 
 
 pub struct TableReseau {
     pub historique: Vec<String>,
@@ -36,11 +46,14 @@ impl Default for TableReseau {
     }
 }
 
+// Application principale 
+
 pub struct CasinoApp {
-    ecran: EcranCasino,
+    ecran: Ecran,
     pub rx_reseau: Option<std::sync::mpsc::Receiver<MessageServeur>>,
     pub tx_reseau: Option<std::sync::mpsc::Sender<ActionJoueur>>,
     pub table: TableReseau,
+    // Paramètres de configuration de partie
     pub nb_joueurs: u32,
     pub jetons_depart: u32,
 }
@@ -48,18 +61,21 @@ pub struct CasinoApp {
 impl Default for CasinoApp {
     fn default() -> Self {
         Self {
-            ecran: EcranCasino::Poker,
+            ecran: Ecran::MenuPrincipal,
             rx_reseau: None,
             tx_reseau: None,
             table: TableReseau::default(),
-            nb_joueurs: 2,
+            nb_joueurs: 4,
             jetons_depart: 1000,
         }
     }
 }
 
+// Boucle principale egui 
+
 impl eframe::App for CasinoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Réception des messages réseau
         if let Some(rx) = &self.rx_reseau {
             while let Ok(msg) = rx.try_recv() {
                 match msg {
@@ -70,6 +86,7 @@ impl eframe::App for CasinoApp {
                         self.table.mes_cartes = cartes;
                         self.table.cartes_communes.clear();
                         self.table.historique.push("--- NOUVELLE MAIN ---".to_string());
+                        self.ecran = Ecran::Poker;
                     }
                     MessageServeur::MajTable { pot, cartes_communes } => {
                         self.table.pot = pot;
@@ -86,33 +103,127 @@ impl eframe::App for CasinoApp {
                         self.table.historique.push(format!("{} -> {}", nom, action));
                     }
                     MessageServeur::DemanderConfiguration => {
-                        self.ecran = EcranCasino::Lobby;
+                        self.ecran = Ecran::MenuPrincipal;
                     }
                 }
             }
             ctx.request_repaint();
         }
 
-        match self.ecran {
-            EcranCasino::Lobby => {
-                self.ui_lobby(ctx);
-            }
-            EcranCasino::Poker => {
-                egui::TopBottomPanel::top("casino_header").show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.heading("Casino Rust - Multijoueur en Ligne");
-                    });
+        egui::TopBottomPanel::top("casino_header").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("🎰  Casino Rust");
+                ui.separator();
+                ui.label(self.label_ecran());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if self.ecran != Ecran::MenuPrincipal {
+                        if ui.button("⬅  Menu principal").clicked() {
+                            self.ecran = Ecran::MenuPrincipal;
+                        }
+                    }
                 });
+            });
+        });
 
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    self.ui_poker(ui);
-                });
+        egui::CentralPanel::default().show(ctx, |ui| {
+            match self.ecran {
+                Ecran::MenuPrincipal => ui_menu_principal(ui, &mut self.ecran),
+                Ecran::PokerLobby   => ui_poker_lobby(ui, &mut self.ecran),
+                Ecran::PokerCreer   => self.ui_poker_creer(ui),
+                Ecran::Poker        => self.ui_poker(ui),
             }
+        });
+    }
+}
+
+// Helpers navigation 
+
+impl CasinoApp {
+    fn label_ecran(&self) -> &'static str {
+        match self.ecran {
+            Ecran::MenuPrincipal => "Menu principal",
+            Ecran::PokerLobby   => "Poker - Lobby",
+            Ecran::PokerCreer   => "Poker - Créer une partie",
+            Ecran::Poker        => "Poker - En jeu",
+        }
+    }
+
+    fn envoyer_action(&mut self, action: ActionJoueur) {
+        self.table.a_mon_tour = false;
+        if let Some(tx) = &self.tx_reseau {
+            let _ = tx.send(action);
         }
     }
 }
 
+// Menu principal 
+//  Ajouter de nouveaux jeux ici 
+
+fn ui_menu_principal(ui: &mut egui::Ui, ecran: &mut Ecran) {
+    ui.add_space(40.0);
+    ui.vertical_centered(|ui| {
+        ui.heading("Jeux disponibles");
+        ui.add_space(20.0);
+        if ui.button("Poker").clicked() {
+            *ecran = Ecran::PokerLobby;
+        }
+    });
+}
+
+// Lobby Poker (créer ou rejoindre) 
+
+fn ui_poker_lobby(ui: &mut egui::Ui, ecran: &mut Ecran) {
+    ui.add_space(40.0);
+    ui.vertical_centered(|ui| {
+        ui.heading("Poker");
+        ui.add_space(20.0);
+        if ui.button("Creer une partie").clicked() {
+            *ecran = Ecran::PokerCreer;
+        }
+        ui.add_space(8.0);
+        if ui.button("Rejoindre une partie").clicked() {
+            *ecran = Ecran::Poker;
+        }
+    });
+}
+
+// Configuration d'une nouvelle partie poker 
+
 impl CasinoApp {
+    fn ui_poker_creer(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new("Configuration de la partie").size(24.0).strong());
+            ui.add_space(32.0);
+
+            egui::Grid::new("poker_config_grid")
+                .num_columns(2)
+                .spacing([24.0, 18.0])
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new("Nombre de joueurs (2-10) :").size(16.0));
+                    ui.add(egui::Slider::new(&mut self.nb_joueurs, 2..=10).min_decimals(0));
+                    ui.end_row();
+
+                    ui.label(egui::RichText::new("Jetons au départ (100-10 000) :").size(16.0));
+                    ui.add(egui::Slider::new(&mut self.jetons_depart, 100..=10_000).min_decimals(0));
+                    ui.end_row();
+                });
+
+            ui.add_space(40.0);
+
+            if ui.add_sized([220.0, 48.0], egui::Button::new(egui::RichText::new("✅  Lancer la partie").size(18.0))).clicked() {
+                self.envoyer_action(ActionJoueur::ConfigurerPartie {
+                    nb_joueurs: self.nb_joueurs,
+                    jetons: self.jetons_depart,
+                });
+                self.table.historique.push("Configuration envoyée ! En attente des joueurs...".to_string());
+                self.ecran = Ecran::Poker;
+            }
+        });
+    }
+
+// Jeu Poker 
+
     fn ui_poker(&mut self, ui: &mut egui::Ui) {
         let table_width = (ui.available_width() * 0.7).max(400.0);
         ui.horizontal(|ui| {
@@ -163,64 +274,9 @@ impl CasinoApp {
             });
         });
     }
-
-    fn envoyer_action(&mut self, action: ActionJoueur) {
-        self.table.a_mon_tour = false;
-        if let Some(tx) = &self.tx_reseau {
-            let _ = tx.send(action);
-        }
-    }
-
-    fn ui_lobby(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let content_width = 520.0f32;
-            let available_width = ui.available_width();
-            let padding = ((available_width - content_width) / 2.0).max(0.0);
-
-            let espacement_haut = ui.available_height() / 3.0;
-            ui.add_space(espacement_haut);
-
-            ui.horizontal(|ui| {
-                ui.add_space(padding);
-                ui.vertical(|ui| {
-                    ui.set_width(content_width);
-
-                    ui.vertical_centered(|ui| {
-                        ui.heading("Création de la partie");
-                    });
-                    ui.add_space(30.0);
-
-                    egui::Grid::new("lobby_grid")
-                        .num_columns(2)
-                        .spacing([20.0, 16.0])
-                        .show(ui, |ui| {
-                            ui.label(egui::RichText::new("Nombre de joueurs (2-10) :").size(18.0));
-                            ui.add(egui::Slider::new(&mut self.nb_joueurs, 2..=10).min_decimals(0));
-                            ui.end_row();
-
-                            ui.label(egui::RichText::new("Jetons de départ (100-10000) :").size(18.0));
-                            ui.add(egui::Slider::new(&mut self.jetons_depart, 100..=10000).min_decimals(0));
-                            ui.end_row();
-                        });
-
-                    ui.add_space(40.0);
-
-                    ui.vertical_centered(|ui| {
-                        if ui.add_sized([200.0, 50.0], egui::Button::new(egui::RichText::new("Commencer la partie").size(20.0))).clicked() {
-                            self.envoyer_action(ActionJoueur::ConfigurerPartie {
-                                nb_joueurs: self.nb_joueurs,
-                                jetons: self.jetons_depart,
-                            });
-                            self.ecran = EcranCasino::Poker;
-                            self.table.historique.push("Configuration envoyée ! En attente des joueurs...".to_string());
-                        }
-                    });
-                });
-            });
-        });
-    }
-
 }
+
+// Rendu graphique de la table 
 
 fn dessiner_table_reseau(ui: &mut egui::Ui, rect: egui::Rect, table: &TableReseau) {
     let painter = ui.painter_at(rect);
@@ -228,29 +284,38 @@ fn dessiner_table_reseau(ui: &mut egui::Ui, rect: egui::Rect, table: &TableResea
     painter.rect_filled(rect, 18.0, bg);
 
     let table_rect = rect.shrink2(egui::vec2(18.0, 12.0));
-    painter.rect_filled(table_rect, 40.0, egui::Color32::from_rgb(18, 92, 64));
+    painter.rect_filled(table_rect, 120.0, egui::Color32::from_rgb(18, 92, 64));
     painter.rect_stroke(
         table_rect,
-        40.0,
+        120.0,
         egui::Stroke::new(4.0, egui::Color32::from_rgb(132, 85, 50)),
         egui::StrokeKind::Outside,
     );
 
     let c = table_rect.center();
 
-    let board_origin = egui::pos2(c.x - 165.0, c.y - 40.0);
+    // Cartes communes (board)
+    let board_origin = egui::pos2(c.x - 165.0, c.y - 20.0);
     for i in 0..5 {
         let x = board_origin.x + i as f32 * 68.0;
         let card_rect = egui::Rect::from_min_size(egui::pos2(x, board_origin.y), egui::vec2(58.0, 82.0));
         if let Some(card) = table.cartes_communes.get(i) {
-            dessiner_carte(&painter, card_rect, &card.to_string(), true);
+            dessiner_carte(&painter, card_rect, true);
+            poser_image_carte(ui, card_rect.shrink(1.0), &card.image_url_api());
         } else {
-            dessiner_carte(&painter, card_rect, "", false);
+            dessiner_carte(&painter, card_rect, false);
         }
     }
 
-    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 60.0), egui::vec2(210.0, 48.0));
+    // Pot
+    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 72.0), egui::vec2(210.0, 48.0));
     painter.rect_filled(pot_rect, 10.0, egui::Color32::from_rgb(11, 41, 30));
+    painter.rect_stroke(
+        pot_rect,
+        10.0,
+        egui::Stroke::new(1.5, egui::Color32::from_rgb(201, 178, 102)),
+        egui::StrokeKind::Outside,
+    );
     painter.text(
         pot_rect.center(),
         egui::Align2::CENTER_CENTER,
@@ -258,34 +323,86 @@ fn dessiner_table_reseau(ui: &mut egui::Ui, rect: egui::Rect, table: &TableResea
         egui::FontId::proportional(22.0),
         egui::Color32::from_rgb(238, 220, 151),
     );
+    dessiner_jetons(&painter, egui::pos2(pot_rect.left() - 34.0, pot_rect.center().y), 3);
+    dessiner_jetons(&painter, egui::pos2(pot_rect.right() + 24.0, pot_rect.center().y), 4);
 
-    let hero_cards_y = table_rect.bottom() - 110.0;
+    // Zones joueurs
+    dessiner_joueur_zone(
+        &painter,
+        egui::Rect::from_center_size(egui::pos2(c.x, table_rect.top() + 32.0), egui::vec2(360.0, 54.0)),
+        "Adversaire",
+    );
+    dessiner_joueur_zone(
+        &painter,
+        egui::Rect::from_center_size(egui::pos2(c.x, table_rect.bottom() - 32.0), egui::vec2(420.0, 54.0)),
+        &format!("Toi   |   Stack: {}   |   A payer: {}", table.mes_jetons, table.to_call),
+    );
+
+    // Cartes adversaire (dos)
+    let bot_cards_y = table_rect.top() + 80.0;
+    for i in 0..2 {
+        let card_rect = egui::Rect::from_min_size(
+            egui::pos2(c.x - 72.0 + i as f32 * 80.0, bot_cards_y),
+            egui::vec2(64.0, 92.0),
+        );
+        dessiner_carte(&painter, card_rect, false);
+    }
+
+    // Cartes du joueur local
+    let hero_cards_y = table_rect.bottom() - 128.0;
     for i in 0..2 {
         let card_rect = egui::Rect::from_min_size(
             egui::pos2(c.x - 72.0 + i as f32 * 80.0, hero_cards_y),
             egui::vec2(64.0, 92.0),
         );
         if let Some(card) = table.mes_cartes.get(i) {
-            dessiner_carte(&painter, card_rect, &card.to_string(), true);
+            dessiner_carte(&painter, card_rect, true);
+            poser_image_carte(ui, card_rect.shrink(1.0), &card.image_url_api());
         } else {
-            dessiner_carte(&painter, card_rect, "", false);
+            dessiner_carte(&painter, card_rect, false);
         }
     }
 }
 
-fn dessiner_carte(painter: &egui::Painter, rect: egui::Rect, texte: &str, face_up: bool) {
+fn dessiner_joueur_zone(painter: &egui::Painter, rect: egui::Rect, texte: &str) {
+    painter.rect_filled(rect, 12.0, egui::Color32::from_rgba_premultiplied(5, 20, 16, 170));
+    painter.rect_stroke(
+        rect,
+        12.0,
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 124, 101)),
+        egui::StrokeKind::Outside,
+    );
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        texte,
+        egui::FontId::proportional(18.0),
+        egui::Color32::from_rgb(220, 232, 227),
+    );
+}
+
+fn dessiner_carte(painter: &egui::Painter, rect: egui::Rect, face_up: bool) {
     if face_up {
         painter.rect_filled(rect, 8.0, egui::Color32::from_rgb(249, 249, 245));
         painter.rect_stroke(rect, 8.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(74, 74, 80)), egui::StrokeKind::Outside);
-        painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            texte,
-            egui::FontId::proportional(26.0),
-            egui::Color32::BLACK,
-        );
     } else {
         painter.rect_filled(rect, 8.0, egui::Color32::from_rgb(24, 47, 93));
         painter.rect_stroke(rect, 8.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(112, 148, 220)), egui::StrokeKind::Outside);
+        painter.rect_filled(rect.shrink(8.0), 6.0, egui::Color32::from_rgb(38, 62, 111));
+    }
+}
+
+fn poser_image_carte(ui: &mut egui::Ui, rect: egui::Rect, url: &str) {
+    let img = egui::Image::from_uri(url).fit_to_exact_size(rect.size());
+    ui.put(rect, img);
+}
+
+fn dessiner_jetons(painter: &egui::Painter, center: egui::Pos2, n: usize) {
+    for i in 0..n {
+        let y = center.y - i as f32 * 6.0;
+        let c = egui::pos2(center.x, y);
+        painter.circle_filled(c, 12.0, egui::Color32::from_rgb(215, 56, 63));
+        painter.circle_stroke(c, 12.0, egui::Stroke::new(1.5, egui::Color32::WHITE));
+        painter.circle_stroke(c, 7.0, egui::Stroke::new(1.0, egui::Color32::WHITE));
     }
 }

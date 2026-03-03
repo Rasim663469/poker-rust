@@ -1,5 +1,4 @@
 use poker_rust::partie::Partie;
-use poker_rust::utils::demander_u32;
 use poker_rust::communication::{MessageClient, MessageServeur,ActionJoueur};
 use tokio::net::TcpListener;
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
@@ -11,7 +10,7 @@ async fn main() -> tokio::io::Result<()> {
 
     println!("En attente du créateur de la partie (Hôte)...");
 
-    let (mut socket_hote, addr_hote) = listener.accept().await?;
+    let (mut socket_hote, _addr_hote) = listener.accept().await?;
     let mut tampon = [0; 1024];
     let n = socket_hote.read(&mut tampon).await?;
     let msg: MessageClient = serde_json::from_slice(&tampon[..n]).unwrap();
