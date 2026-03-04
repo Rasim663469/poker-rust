@@ -3,10 +3,16 @@ use std::collections::BTreeMap;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};   
 
+<<<<<<< HEAD:src/partie.rs
 use crate::carte::{Carte, Paquet};
 use crate::joueur::Joueur;
 use crate::utils::demander;
 use crate::communication::{MessageClient,MessageServeur,ActionJoueur};
+=======
+use crate::core::cards::{Carte, Paquet};
+use crate::core::player::Joueur;
+use crate::core::utils::{demander, demander_u32};
+>>>>>>> Rasim:src/games/poker/engine.rs
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]

@@ -1,4 +1,5 @@
-mod carte;
+mod core;
+mod games;
 mod interface;
 mod joueur;
 mod partie;

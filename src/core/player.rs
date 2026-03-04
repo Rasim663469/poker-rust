@@ -1,8 +1,4 @@
 use crate::carte::Carte;
-use serde::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize)]
-
 
 pub struct Joueur {
     pub nom: String,
