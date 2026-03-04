@@ -1,8 +1,6 @@
-#![allow(dead_code, unused)]
+#![allow(dead_code)]
 
-pub mod carte;
-pub mod joueur;
-pub mod partie;
-pub mod utils;
 pub mod communication;
+pub mod core;
+pub mod games;
 pub mod interface;
