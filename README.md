@@ -15,13 +15,18 @@ Ce projet contient plusieurs binaires Rust :
   ```bash
   cd poker-rust
 ## 2) Lancer l’application GUI (local)
+```bash
 cargo run --bin poker-rust
+```
 
 ## 3) Lancer le mode Poker Online (multijoueur)
 Étape A - Démarrer le serveur
 Dans un premier terminal:
+```bash
 cargo run --bin server
-
+```
 Étape B - Lancer les clients GUI
 Dans un second terminal (et plus si besoin) :
+```bash
 cargo run --bin poker-rust
+```
