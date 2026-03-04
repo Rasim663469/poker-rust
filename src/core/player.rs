@@ -1,4 +1,4 @@
-use crate::carte::Carte;
+use crate::core::cards::Carte;
 
 pub struct Joueur {
     pub nom: String,

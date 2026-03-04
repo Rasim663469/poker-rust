@@ -1,14 +1,12 @@
-mod carte;
+mod core;
+mod games;
 mod interface;
-mod joueur;
-mod partie;
-mod utils;
 
 fn main() {
     let mode_cli = std::env::args().any(|arg| arg == "--cli");
 
     if mode_cli {
-        interface::terminal::lancer_poker_cli();
+        interface::terminal::lancer_casino_cli();
         return;
     }
 
