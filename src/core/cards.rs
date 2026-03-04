@@ -2,6 +2,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use std::fmt;
 use serde::{Serialize, Deserialize};
+use tokio::runtime::Handle;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Couleur {
@@ -193,6 +194,9 @@ struct ApiSuccessOnly {
 }
 
 fn api_creer_deck_id() -> Option<String> {
+    if est_dans_runtime_tokio() {
+        return None;
+    }
     let url = "https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1";
     let resp = reqwest::blocking::get(url).ok()?;
     let payload: ApiDeckResponse = resp.json().ok()?;
@@ -204,6 +208,9 @@ fn api_creer_deck_id() -> Option<String> {
 }
 
 fn api_melanger(deck_id: &str) -> bool {
+    if est_dans_runtime_tokio() {
+        return false;
+    }
     let url = format!("https://deckofcardsapi.com/api/deck/{}/shuffle/", deck_id);
     let resp = match reqwest::blocking::get(url) {
         Ok(r) => r,
@@ -216,6 +223,9 @@ fn api_melanger(deck_id: &str) -> bool {
 }
 
 fn api_tirer_carte(deck_id: &str) -> Option<Carte> {
+    if est_dans_runtime_tokio() {
+        return None;
+    }
     let url = format!("https://deckofcardsapi.com/api/deck/{}/draw/?count=1", deck_id);
     let resp = reqwest::blocking::get(url).ok()?;
     let payload: ApiDrawResponse = resp.json().ok()?;
@@ -229,6 +239,9 @@ fn api_tirer_carte(deck_id: &str) -> Option<Carte> {
 }
 
 fn api_ajouter_a_pile(deck_id: &str, pile_nom: &str, code: &str) -> bool {
+    if est_dans_runtime_tokio() {
+        return false;
+    }
     let url = format!(
         "https://deckofcardsapi.com/api/deck/{}/pile/{}/add/?cards={}",
         deck_id, pile_nom, code
@@ -297,4 +310,8 @@ fn couleur_code_api(c: Couleur) -> &'static str {
         Couleur::Trefle => "C",
         Couleur::Pique => "S",
     }
+}
+
+fn est_dans_runtime_tokio() -> bool {
+    Handle::try_current().is_ok()
 }

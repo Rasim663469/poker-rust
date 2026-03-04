@@ -4,3 +4,4 @@ pub mod communication;
 pub mod core;
 pub mod games;
 pub mod interface;
+pub mod network;
