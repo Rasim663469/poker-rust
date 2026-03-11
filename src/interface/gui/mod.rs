@@ -6,6 +6,7 @@ mod blackjack;
 mod draw;
 mod poker;
 mod poker_online;
+mod slotmachine;
 
 use self::poker::PokerGuiGame;
 use self::poker_online::OnlinePokerState;
@@ -15,6 +16,7 @@ enum EcranCasino {
     Menu,
     Poker,
     Blackjack,
+    SlotMachine,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,6 +69,8 @@ pub struct CasinoApp {
     bj_nb_joueurs: u8,
     bj_jetons_depart: u32,
     bj_mise_input: u32,
+    slot_symbols: [usize; 3],
+    slot_result: String,
 }
 
 impl Default for CasinoApp {
@@ -85,6 +89,8 @@ impl Default for CasinoApp {
             bj_nb_joueurs: 3,
             bj_jetons_depart: 500,
             bj_mise_input: 20,
+            slot_symbols: [0, 1, 2],
+            slot_result: String::new(),
         }
     }
 }
@@ -108,6 +114,7 @@ impl eframe::App for CasinoApp {
                     EcranCasino::Menu => "Menu",
                     EcranCasino::Poker => "Poker jouable en GUI",
                     EcranCasino::Blackjack => "Blackjack jouable en GUI",
+                    EcranCasino::SlotMachine => "Machine a sous",
                 });
             });
         });
@@ -116,6 +123,7 @@ impl eframe::App for CasinoApp {
             EcranCasino::Menu => self.ui_menu(ui),
             EcranCasino::Poker => self.ui_poker(ui),
             EcranCasino::Blackjack => self.ui_blackjack(ui),
+            EcranCasino::SlotMachine => self.ui_slot_machine(ui),
         });
 
         ctx.request_repaint_after(std::time::Duration::from_millis(80));
@@ -135,6 +143,9 @@ impl CasinoApp {
         }
         if ui.button("Blackjack").clicked() {
             self.ecran = EcranCasino::Blackjack;
+        }
+        if ui.button("Machine a sous").clicked() {
+            self.ecran = EcranCasino::SlotMachine;
         }
     }
 }
