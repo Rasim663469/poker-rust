@@ -1,9 +1,11 @@
 use crate::games::blackjack::engine::JeuBlackjack;
+use crate::games::hilo::AceMode;
 use eframe::egui;
 use std::sync::mpsc;
 
 mod blackjack;
 mod draw;
+mod hilo;
 mod poker;
 mod poker_online;
 mod slotmachine;
@@ -17,6 +19,7 @@ enum EcranCasino {
     Poker,
     Blackjack,
     SlotMachine,
+    HiLo,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +74,17 @@ pub struct CasinoApp {
     bj_mise_input: u32,
     slot_symbols: [usize; 3],
     slot_result: String,
+    hilo: Option<crate::games::hilo::HiLoGame>,
+    hilo_jetons_depart: u32,
+    hilo_mise_input: u32,
+    hilo_allow_equal: bool,
+    hilo_ace_mode: AceMode,
+    hilo_payout_win: u32,
+    hilo_payout_equal: u32,
+    hilo_min_bet: u32,
+    hilo_max_bet: u32,
+    hilo_last_outcome: Option<crate::games::hilo::HiLoOutcome>,
+    hilo_reveal_at: Option<std::time::Instant>,
 }
 
 impl Default for CasinoApp {
@@ -91,6 +105,17 @@ impl Default for CasinoApp {
             bj_mise_input: 20,
             slot_symbols: [0, 1, 2],
             slot_result: String::new(),
+            hilo: None,
+            hilo_jetons_depart: 500,
+            hilo_mise_input: 10,
+            hilo_allow_equal: false,
+            hilo_ace_mode: AceMode::High,
+            hilo_payout_win: 1,
+            hilo_payout_equal: 5,
+            hilo_min_bet: 1,
+            hilo_max_bet: 1000,
+            hilo_last_outcome: None,
+            hilo_reveal_at: None,
         }
     }
 }
@@ -115,6 +140,7 @@ impl eframe::App for CasinoApp {
                     EcranCasino::Poker => "Poker jouable en GUI",
                     EcranCasino::Blackjack => "Blackjack jouable en GUI",
                     EcranCasino::SlotMachine => "Machine a sous",
+                    EcranCasino::HiLo => "Hi-Lo",
                 });
             });
         });
@@ -124,6 +150,7 @@ impl eframe::App for CasinoApp {
             EcranCasino::Poker => self.ui_poker(ui),
             EcranCasino::Blackjack => self.ui_blackjack(ui),
             EcranCasino::SlotMachine => self.ui_slot_machine(ui),
+            EcranCasino::HiLo => self.ui_hilo(ui),
         });
 
         ctx.request_repaint_after(std::time::Duration::from_millis(80));
@@ -146,6 +173,9 @@ impl CasinoApp {
         }
         if ui.button("Machine a sous").clicked() {
             self.ecran = EcranCasino::SlotMachine;
+        }
+        if ui.button("Hi-Lo").clicked() {
+            self.ecran = EcranCasino::HiLo;
         }
     }
 }
