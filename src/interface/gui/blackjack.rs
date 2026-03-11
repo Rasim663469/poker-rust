@@ -22,18 +22,43 @@ impl super::CasinoApp {
                     .range(2..=6)
                     .prefix("Joueurs: "),
             );
+            let max_buyin = self.banque_joueur.max(50);
+            if self.bj_jetons_depart > max_buyin {
+                self.bj_jetons_depart = max_buyin;
+            }
             ui.add(
                 egui::DragValue::new(&mut self.bj_jetons_depart)
-                    .range(50..=10_000)
+                    .range(50..=max_buyin)
                     .prefix("Jetons: "),
             );
             ui.add_space(10.0);
-            if ui.button("Creer table Blackjack").clicked() {
-                self.blackjack = Some(JeuBlackjack::nouveau(
-                    self.bj_nb_joueurs as usize,
-                    self.bj_jetons_depart,
-                ));
+            if self.banque_joueur < 50 {
+                ui.colored_label(egui::Color32::RED, "Pas assez de jetons dans la banque !");
+            } else if ui.button("Creer table Blackjack").clicked() {
+                if self.banque_joueur >= self.bj_jetons_depart {
+                    self.banque_joueur -= self.bj_jetons_depart;
+                    self.blackjack = Some(JeuBlackjack::nouveau(
+                        self.bj_nb_joueurs as usize,
+                        self.bj_jetons_depart,
+                    ));
+                }
             }
+            return;
+        }
+
+        let mut quitter = false;
+        if let Some(jeu) = &self.blackjack {
+            ui.horizontal(|ui| {
+                if ui.button("Quitter la table").clicked() {
+                    quitter = true;
+                }
+            });
+        }
+        if quitter {
+            if let Some(jeu) = &self.blackjack {
+                self.banque_joueur += jeu.jetons_humain();
+            }
+            self.blackjack = None;
             return;
         }
 

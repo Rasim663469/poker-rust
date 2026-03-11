@@ -448,9 +448,13 @@ impl super::CasinoApp {
             ui.label("Parametres de la table:");
             ui.add_space(8.0);
 
+            let max_buyin = self.banque_joueur.max(50);
+            if self.jetons_depart > max_buyin {
+                self.jetons_depart = max_buyin;
+            }
             ui.add(
                 egui::DragValue::new(&mut self.jetons_depart)
-                    .range(50..=10_000)
+                    .range(50..=max_buyin)
                     .prefix("Jetons depart: ")
                     .speed(10.0),
             );
@@ -469,12 +473,17 @@ impl super::CasinoApp {
             );
 
             ui.add_space(10.0);
-            if ui.button("Lancer une partie").clicked() {
-                self.poker = Some(PokerGuiGame::new(
-                    self.jetons_depart,
-                    self.small_blind,
-                    self.big_blind,
-                ));
+            if self.banque_joueur < 50 {
+                ui.colored_label(egui::Color32::RED, "Pas assez de jetons dans la banque !");
+            } else if ui.button("Lancer une partie").clicked() {
+                if self.banque_joueur >= self.jetons_depart {
+                    self.banque_joueur -= self.jetons_depart;
+                    self.poker = Some(PokerGuiGame::new(
+                        self.jetons_depart,
+                        self.small_blind,
+                        self.big_blind,
+                    ));
+                }
             }
             return;
         }
@@ -510,6 +519,7 @@ impl super::CasinoApp {
                 }
             });
             if fermer_table {
+                self.banque_joueur += game.hero.jetons;
                 self.poker = None;
             }
             return;
@@ -522,6 +532,7 @@ impl super::CasinoApp {
         });
 
         if fermer_table {
+            self.banque_joueur += game.hero.jetons;
             self.poker = None;
             return;
         }

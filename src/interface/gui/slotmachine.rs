@@ -11,16 +11,32 @@ impl super::CasinoApp {
                 self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
             dessiner_slot_machine(ui, &self.slot_symbols, highlight);
             ui.add_space(10.0);
+            
+            ui.horizontal(|ui| {
+                ui.label("Ta mise :");
+                let max_mise = self.banque_joueur.max(1);
+                if self.slot_mise > max_mise {
+                    self.slot_mise = max_mise;
+                }
+                ui.add(egui::Slider::new(&mut self.slot_mise, 1..=max_mise).text("€"));
+            });
+            ui.label(format!("Jackpot potentiel : {} €", self.slot_mise * 10));
+            
             ui.horizontal(|ui| {
                 ui.add_space(750.0);
-                if ui
+                if self.banque_joueur < self.slot_mise {
+                    ui.colored_label(egui::Color32::RED, "Pas assez d'euros !");
+                } else if ui
                     .add(egui::Button::new("Lancer !").min_size(egui::vec2(100.0, 40.0)))
                     .clicked()
                 {
+                    self.banque_joueur -= self.slot_mise;
                     let result = SlotMachine::spin();
                     self.slot_symbols = result.symbols;
                     self.slot_result = if result.win {
-                        "Jackpot !".to_string()
+                        let gain = self.slot_mise * 10;
+                        self.banque_joueur += gain;
+                        format!("Jackpot ! (+{} €)", gain)
                     } else {
                         "Perdu...".to_string()
                     };

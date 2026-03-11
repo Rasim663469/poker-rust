@@ -58,6 +58,7 @@ impl Street {
 pub struct CasinoApp {
     ecran: EcranCasino,
     poker_vue: PokerVue,
+    banque_joueur: u32,
     jetons_depart: u32,
     small_blind: u32,
     big_blind: u32,
@@ -71,6 +72,7 @@ pub struct CasinoApp {
     bj_mise_input: u32,
     slot_symbols: [usize; 3],
     slot_result: String,
+    slot_mise: u32,
 }
 
 impl Default for CasinoApp {
@@ -78,6 +80,7 @@ impl Default for CasinoApp {
         Self {
             ecran: EcranCasino::Menu,
             poker_vue: PokerVue::Choix,
+            banque_joueur: 1000,
             jetons_depart: 200,
             small_blind: 10,
             big_blind: 20,
@@ -91,6 +94,7 @@ impl Default for CasinoApp {
             bj_mise_input: 20,
             slot_symbols: [0, 1, 2],
             slot_result: String::new(),
+            slot_mise: 10,
         }
     }
 }
@@ -116,6 +120,8 @@ impl eframe::App for CasinoApp {
                     EcranCasino::Blackjack => "Blackjack jouable en GUI",
                     EcranCasino::SlotMachine => "Machine a sous",
                 });
+                ui.separator();
+                ui.label(format!("Banque : {} €", self.banque_joueur));
             });
         });
 
