@@ -18,11 +18,15 @@ impl super::CasinoApp {
             ui.label("Regles standard: egalite = perdu (sauf option Equal).");
             ui.add_space(8.0);
 
+            let max_buyin = self.banque_joueur.max(50);
+            if self.hilo_jetons_depart > max_buyin {
+                self.hilo_jetons_depart = max_buyin;
+            }
             ui.group(|ui| {
                 ui.label("Configuration:");
                 ui.add(
                     egui::DragValue::new(&mut self.hilo_jetons_depart)
-                        .range(50..=10_000)
+                        .range(50..=max_buyin)
                         .prefix("Jetons depart: "),
                 );
                 ui.add(
@@ -55,22 +59,27 @@ impl super::CasinoApp {
             });
 
             ui.add_space(8.0);
-            if ui.button("Creer une table").clicked() {
-                let mut game = HiLoGame::new_with_config(
-                    self.hilo_jetons_depart,
-                    HiLoConfig {
-                        allow_equal: self.hilo_allow_equal,
-                        ace_mode: self.hilo_ace_mode,
-                        payout_win: self.hilo_payout_win,
-                        payout_equal: self.hilo_payout_equal,
-                        min_bet: self.hilo_min_bet,
-                        max_bet: self.hilo_max_bet,
-                    },
-                );
-                if game.config.min_bet > game.config.max_bet {
-                    game.config.max_bet = game.config.min_bet;
+            if self.banque_joueur < 50 {
+                ui.colored_label(egui::Color32::RED, "Pas assez d'euros dans la banque !");
+            } else if ui.button("Creer une table").clicked() {
+                if self.banque_joueur >= self.hilo_jetons_depart {
+                    self.banque_joueur -= self.hilo_jetons_depart;
+                    let mut game = HiLoGame::new_with_config(
+                        self.hilo_jetons_depart,
+                        HiLoConfig {
+                            allow_equal: self.hilo_allow_equal,
+                            ace_mode: self.hilo_ace_mode,
+                            payout_win: self.hilo_payout_win,
+                            payout_equal: self.hilo_payout_equal,
+                            min_bet: self.hilo_min_bet,
+                            max_bet: self.hilo_max_bet,
+                        },
+                    );
+                    if game.config.min_bet > game.config.max_bet {
+                        game.config.max_bet = game.config.min_bet;
+                    }
+                    self.hilo = Some(game);
                 }
-                self.hilo = Some(game);
             }
             return;
         }
@@ -157,6 +166,9 @@ impl super::CasinoApp {
         });
 
         if reset_table {
+            if let Some(game) = &self.hilo {
+                self.banque_joueur += game.jetons;
+            }
             self.hilo = None;
             self.hilo_last_outcome = None;
             self.hilo_reveal_at = None;
