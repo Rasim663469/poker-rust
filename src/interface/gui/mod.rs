@@ -20,6 +20,7 @@ enum EcranCasino {
     Blackjack,
     SlotMachine,
     HiLo,
+    Depot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,6 +88,7 @@ pub struct CasinoApp {
     hilo_max_bet: u32,
     hilo_last_outcome: Option<crate::games::hilo::HiLoOutcome>,
     hilo_reveal_at: Option<std::time::Instant>,
+    depot_input: u32,
 }
 
 impl Default for CasinoApp {
@@ -121,6 +123,7 @@ impl Default for CasinoApp {
             hilo_max_bet: 1000,
             hilo_last_outcome: None,
             hilo_reveal_at: None,
+            depot_input: 100,
         }
     }
 }
@@ -146,6 +149,7 @@ impl eframe::App for CasinoApp {
                     EcranCasino::Blackjack => "Blackjack jouable en GUI",
                     EcranCasino::SlotMachine => "Machine a sous",
                     EcranCasino::HiLo => "Hi-Lo",
+                    EcranCasino::Depot => "Depot",
                 });
                 ui.separator();
                 ui.label(format!("Banque : {} €", self.banque_joueur));
@@ -158,6 +162,7 @@ impl eframe::App for CasinoApp {
             EcranCasino::Blackjack => self.ui_blackjack(ui),
             EcranCasino::SlotMachine => self.ui_slot_machine(ui),
             EcranCasino::HiLo => self.ui_hilo(ui),
+            EcranCasino::Depot => self.ui_depot(ui),
         });
 
         ctx.request_repaint_after(std::time::Duration::from_millis(80));
@@ -183,6 +188,53 @@ impl CasinoApp {
         }
         if ui.button("Hi-Lo").clicked() {
             self.ecran = EcranCasino::HiLo;
+        }
+        ui.add_space(14.0);
+        ui.separator();
+        if ui.button("💰 Ajouter de l'argent").clicked() {
+            self.depot_input = 100;
+            self.ecran = EcranCasino::Depot;
+        }
+    }
+
+    fn ui_depot(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("<- Retour menu").clicked() {
+                self.ecran = EcranCasino::Menu;
+            }
+            ui.separator();
+            ui.heading("Recharger la banque");
+        });
+
+        ui.add_space(20.0);
+        ui.label(format!("Solde actuel : {} €", self.banque_joueur));
+        ui.add_space(12.0);
+
+        ui.horizontal(|ui| {
+            ui.label("Montant a ajouter :");
+            ui.add(
+                egui::DragValue::new(&mut self.depot_input)
+                    .range(10..=u32::MAX)
+                    .prefix("")
+                    .suffix(" €")
+                    .speed(10.0),
+            );
+        });
+
+        ui.add_space(6.0);
+        ui.label("Montant rapide :");
+        ui.horizontal(|ui| {
+            for montant in [50, 100, 200, 500, 1000] {
+                if ui.button(format!("+{} €", montant)).clicked() {
+                    self.depot_input = montant;
+                }
+            }
+        });
+
+        ui.add_space(14.0);
+        if ui.button(format!("✅ Ajouter {} € au compte", self.depot_input)).clicked() {
+            self.banque_joueur += self.depot_input;
+            self.ecran = EcranCasino::Menu;
         }
     }
 }
