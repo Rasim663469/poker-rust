@@ -1,4 +1,6 @@
 use crate::core::cards::{Carte, Paquet};
+use crate::db::joueur_repo;
+use crate::db::DbPool;
 use crate::network::protocol::{ActionJoueur, MessageClient, MessageServeur};
 use crate::network::{recv_json, send_json};
 use std::cmp::Ordering;
@@ -6,6 +8,7 @@ use std::io;
 use tokio::net::{TcpListener, TcpStream};
 
 struct RemotePlayer {
+    db_id: i32,
     nom: String,
     stream: TcpStream,
     jetons: u32,
@@ -14,30 +17,31 @@ struct RemotePlayer {
     mise_tour: u32,
 }
 
-pub async fn run_poker_server(addr: &str) -> io::Result<()> {
+pub async fn run_poker_server(addr: &str, pool: DbPool) -> io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     println!("Serveur poker en ecoute sur {addr}");
 
     let (mut host_stream, host_addr) = listener.accept().await?;
-    let host_name = lire_connexion(&mut host_stream).await?;
+    let (host_id, host_name, host_jetons) = authentifier_joueur(&mut host_stream, &pool).await?;
     println!("Hote connecte: {host_name} ({host_addr})");
 
     send_json(&mut host_stream, &MessageServeur::DemanderConfiguration).await?;
-    let (nb_joueurs_cfg, jetons_depart) = match recv_json::<MessageClient, _>(&mut host_stream).await? {
-        MessageClient::Action(ActionJoueur::ConfigurerPartie { nb_joueurs, jetons }) => {
-            (nb_joueurs.clamp(2, 6) as usize, jetons.max(50))
+    let nb_joueurs_cfg = match recv_json::<MessageClient, _>(&mut host_stream).await? {
+        MessageClient::Action(ActionJoueur::ConfigurerPartie { nb_joueurs, .. }) => {
+            nb_joueurs.clamp(2, 6) as usize
         }
-        _ => (2, 1000),
+        _ => 2,
     };
 
     let nb_joueurs = nb_joueurs_cfg;
-    println!("Configuration: {nb_joueurs} joueurs, {jetons_depart} jetons.");
+    println!("Configuration: {nb_joueurs} joueurs.");
 
     let mut joueurs = Vec::with_capacity(nb_joueurs);
     joueurs.push(RemotePlayer {
+        db_id: host_id,
         nom: host_name,
         stream: host_stream,
-        jetons: jetons_depart,
+        jetons: host_jetons,
         main: Vec::new(),
         couche: false,
         mise_tour: 0,
@@ -45,7 +49,7 @@ pub async fn run_poker_server(addr: &str) -> io::Result<()> {
 
     while joueurs.len() < nb_joueurs {
         let (mut stream, addr) = listener.accept().await?;
-        let pseudo = lire_connexion(&mut stream).await?;
+        let (db_id, pseudo, jetons) = authentifier_joueur(&mut stream, &pool).await?;
         println!("Joueur connecte: {pseudo} ({addr})");
         send_json(
             &mut stream,
@@ -55,9 +59,10 @@ pub async fn run_poker_server(addr: &str) -> io::Result<()> {
         )
         .await?;
         joueurs.push(RemotePlayer {
+            db_id,
             nom: pseudo,
             stream,
-            jetons: jetons_depart,
+            jetons,
             main: Vec::new(),
             couche: false,
             mise_tour: 0,
@@ -102,6 +107,12 @@ pub async fn run_poker_server(addr: &str) -> io::Result<()> {
             big_blind,
         )
         .await?;
+    }
+
+    for j in &joueurs {
+        if let Err(e) = joueur_repo::maj_jetons(&pool, j.db_id, j.jetons as i32).await {
+            eprintln!("Erreur maj jetons pour {}: {e}", j.nom);
+        }
     }
 
     Ok(())
@@ -489,14 +500,46 @@ fn compare_eval(a: (u8, &[u8]), b: (u8, &[u8])) -> Ordering {
     a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1))
 }
 
-async fn lire_connexion(stream: &mut TcpStream) -> io::Result<String> {
-    let msg: MessageClient = recv_json(stream).await?;
-    match msg {
-        MessageClient::Connexion { pseudo } => Ok(pseudo),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "premier message attendu: Connexion",
-        )),
+async fn authentifier_joueur(
+    stream: &mut TcpStream,
+    pool: &DbPool,
+) -> io::Result<(i32, String, u32)> {
+    loop {
+        let msg: MessageClient = recv_json(stream).await?;
+        match msg {
+            MessageClient::Login { pseudo, mot_de_passe } => {
+                match joueur_repo::authentifier(pool, &pseudo, &mot_de_passe).await {
+                    Ok(Some(j)) => {
+                        send_json(stream, &MessageServeur::AuthOk { jetons: j.jetons as u32 }).await?;
+                        return Ok((j.id, j.pseudo, j.jetons as u32));
+                    }
+                    Ok(None) => {
+                        send_json(stream, &MessageServeur::AuthEchec {
+                            raison: "Pseudo ou mot de passe incorrect.".to_string(),
+                        }).await?;
+                    }
+                    Err(e) => {
+                        send_json(stream, &MessageServeur::AuthEchec { raison: e }).await?;
+                    }
+                }
+            }
+            MessageClient::Inscription { pseudo, mot_de_passe } => {
+                match joueur_repo::inscrire(pool, &pseudo, &mot_de_passe).await {
+                    Ok(j) => {
+                        send_json(stream, &MessageServeur::AuthOk { jetons: j.jetons as u32 }).await?;
+                        return Ok((j.id, j.pseudo, j.jetons as u32));
+                    }
+                    Err(e) => {
+                        send_json(stream, &MessageServeur::AuthEchec { raison: e }).await?;
+                    }
+                }
+            }
+            _ => {
+                send_json(stream, &MessageServeur::AuthEchec {
+                    raison: "Message inattendu. Envoyez Login ou Inscription.".to_string(),
+                }).await?;
+            }
+        }
     }
 }
 

@@ -6,15 +6,18 @@ use std::sync::mpsc;
 mod blackjack;
 mod draw;
 mod hilo;
+mod login;
 mod poker;
 mod poker_online;
 mod slotmachine;
 
+use self::login::LoginState;
 use self::poker::PokerGuiGame;
 use self::poker_online::OnlinePokerState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EcranCasino {
+    Login,
     Menu,
     Poker,
     Blackjack,
@@ -61,6 +64,9 @@ impl Street {
 
 pub struct CasinoApp {
     ecran: EcranCasino,
+    joueur_pseudo: String,
+    joueur_db_id: Option<i32>,
+    login: LoginState,
     poker_vue: PokerVue,
     banque_joueur: u32,
     jetons_depart: u32,
@@ -94,9 +100,12 @@ pub struct CasinoApp {
 impl Default for CasinoApp {
     fn default() -> Self {
         Self {
-            ecran: EcranCasino::Menu,
+            ecran: EcranCasino::Login,
+            joueur_pseudo: String::new(),
+            joueur_db_id: None,
+            login: LoginState::default(),
             poker_vue: PokerVue::Choix,
-            banque_joueur: 1000,
+            banque_joueur: 0,
             jetons_depart: 200,
             small_blind: 10,
             big_blind: 20,
@@ -111,7 +120,6 @@ impl Default for CasinoApp {
             slot_symbols: [0, 1, 2],
             slot_result: String::new(),
             slot_mise: 10,
-
             hilo: None,
             hilo_jetons_depart: 500,
             hilo_mise_input: 10,
@@ -139,24 +147,41 @@ impl eframe::App for CasinoApp {
             bj.avancer_automatique();
         }
 
+        if self.ecran == EcranCasino::Login {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                self.ui_login(ui, ctx);
+            });
+            return;
+        }
+
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Casino Rust");
                 ui.separator();
                 ui.label(match self.ecran {
+                    EcranCasino::Login => "",
                     EcranCasino::Menu => "Menu",
-                    EcranCasino::Poker => "Poker jouable en GUI",
-                    EcranCasino::Blackjack => "Blackjack jouable en GUI",
-                    EcranCasino::SlotMachine => "Machine a sous",
+                    EcranCasino::Poker => "Poker Texas Hold'em",
+                    EcranCasino::Blackjack => "Blackjack",
+                    EcranCasino::SlotMachine => "Machine à sous",
                     EcranCasino::HiLo => "Hi-Lo",
-                    EcranCasino::Depot => "Depot",
+                    EcranCasino::Depot => "Dépôt",
                 });
                 ui.separator();
-                ui.label(format!("Banque : {} €", self.banque_joueur));
+                ui.label(format!("👤 {}", self.joueur_pseudo));
+                ui.separator();
+                ui.label(format!("💰 {} €", self.banque_joueur));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("Déconnexion").clicked() {
+                        self.login = LoginState::default();
+                        self.ecran = EcranCasino::Login;
+                    }
+                });
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| match self.ecran {
+            EcranCasino::Login => {}
             EcranCasino::Menu => self.ui_menu(ui),
             EcranCasino::Poker => self.ui_poker(ui),
             EcranCasino::Blackjack => self.ui_blackjack(ui),

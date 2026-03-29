@@ -13,8 +13,11 @@ pub enum ActionJoueur {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageClient {
     Connexion { pseudo: String },
+    Login { pseudo: String, mot_de_passe: String },
+    Inscription { pseudo: String, mot_de_passe: String },
     Action(ActionJoueur),
 }
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageServeur {
@@ -29,4 +32,7 @@ pub enum MessageServeur {
     AnnonceAction { nom: String, action: String },
     DemanderConfiguration,
     Erreur { message: String },
+    AuthOk { jetons: u32 },
+    AuthEchec { raison: String },
 }
+
