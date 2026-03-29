@@ -1,5 +1,6 @@
 use crate::games::blackjack::engine::JeuBlackjack;
 use crate::games::hilo::AceMode;
+use crate::games::roulette::RouletteResult;
 use eframe::egui;
 use std::sync::mpsc;
 
@@ -9,11 +10,13 @@ mod hilo;
 mod login;
 mod poker;
 mod poker_online;
+mod roulette;
 mod slotmachine;
 
 use self::login::LoginState;
 use self::poker::PokerGuiGame;
 use self::poker_online::OnlinePokerState;
+use self::roulette::RouletteBetUI;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EcranCasino {
@@ -23,6 +26,7 @@ enum EcranCasino {
     Blackjack,
     SlotMachine,
     HiLo,
+    Roulette,
     Depot,
 }
 
@@ -83,6 +87,7 @@ pub struct CasinoApp {
     slot_symbols: [usize; 3],
     slot_result: String,
     slot_mise: u32,
+    slot_anim: Option<slotmachine::SlotMachineAnim>,
     hilo: Option<crate::games::hilo::HiLoGame>,
     hilo_jetons_depart: u32,
     hilo_mise_input: u32,
@@ -94,6 +99,11 @@ pub struct CasinoApp {
     hilo_max_bet: u32,
     hilo_last_outcome: Option<crate::games::hilo::HiLoOutcome>,
     hilo_reveal_at: Option<std::time::Instant>,
+    roulette_bet: RouletteBetUI,
+    roulette_mise: u32,  // Slider value
+    roulette_mise_en_jeu: u32,  // Actual deducted bet
+    roulette_last_result: Option<RouletteResult>,
+    roulette_anim: Option<roulette::RouletteAnim>,
     depot_input: u32,
 }
 
@@ -120,6 +130,7 @@ impl Default for CasinoApp {
             slot_symbols: [0, 1, 2],
             slot_result: String::new(),
             slot_mise: 10,
+            slot_anim: None,
             hilo: None,
             hilo_jetons_depart: 500,
             hilo_mise_input: 10,
@@ -131,6 +142,11 @@ impl Default for CasinoApp {
             hilo_max_bet: 1000,
             hilo_last_outcome: None,
             hilo_reveal_at: None,
+            roulette_bet: RouletteBetUI::None,
+            roulette_mise: 10,
+            roulette_mise_en_jeu: 0,
+            roulette_last_result: None,
+            roulette_anim: None,
             depot_input: 100,
         }
     }
@@ -165,6 +181,7 @@ impl eframe::App for CasinoApp {
                     EcranCasino::Blackjack => "Blackjack",
                     EcranCasino::SlotMachine => "Machine à sous",
                     EcranCasino::HiLo => "Hi-Lo",
+                    EcranCasino::Roulette => "Roulette",
                     EcranCasino::Depot => "Dépôt",
                 });
                 ui.separator();
@@ -187,6 +204,7 @@ impl eframe::App for CasinoApp {
             EcranCasino::Blackjack => self.ui_blackjack(ui),
             EcranCasino::SlotMachine => self.ui_slot_machine(ui),
             EcranCasino::HiLo => self.ui_hilo(ui),
+            EcranCasino::Roulette => self.ui_roulette(ui),
             EcranCasino::Depot => self.ui_depot(ui),
         });
 
@@ -213,6 +231,9 @@ impl CasinoApp {
         }
         if ui.button("Hi-Lo").clicked() {
             self.ecran = EcranCasino::HiLo;
+        }
+        if ui.button("Roulette").clicked() {
+            self.ecran = EcranCasino::Roulette;
         }
         ui.add_space(14.0);
         ui.separator();
