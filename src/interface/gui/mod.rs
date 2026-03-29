@@ -87,6 +87,7 @@ pub struct CasinoApp {
     slot_symbols: [usize; 3],
     slot_result: String,
     slot_mise: u32,
+    slot_anim: Option<slotmachine::SlotMachineAnim>,
     hilo: Option<crate::games::hilo::HiLoGame>,
     hilo_jetons_depart: u32,
     hilo_mise_input: u32,
@@ -99,7 +100,8 @@ pub struct CasinoApp {
     hilo_last_outcome: Option<crate::games::hilo::HiLoOutcome>,
     hilo_reveal_at: Option<std::time::Instant>,
     roulette_bet: RouletteBetUI,
-    roulette_mise: u32,
+    roulette_mise: u32,  // Slider value
+    roulette_mise_en_jeu: u32,  // Actual deducted bet
     roulette_last_result: Option<RouletteResult>,
     roulette_anim: Option<roulette::RouletteAnim>,
     depot_input: u32,
@@ -128,6 +130,7 @@ impl Default for CasinoApp {
             slot_symbols: [0, 1, 2],
             slot_result: String::new(),
             slot_mise: 10,
+            slot_anim: None,
             hilo: None,
             hilo_jetons_depart: 500,
             hilo_mise_input: 10,
@@ -141,6 +144,7 @@ impl Default for CasinoApp {
             hilo_reveal_at: None,
             roulette_bet: RouletteBetUI::None,
             roulette_mise: 10,
+            roulette_mise_en_jeu: 0,
             roulette_last_result: None,
             roulette_anim: None,
             depot_input: 100,

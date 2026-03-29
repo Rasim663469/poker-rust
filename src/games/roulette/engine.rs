@@ -54,6 +54,8 @@ pub struct RouletteResult {
     pub number: u8, // 0-36
     pub color: RouletteColor,
     pub win: bool,
+    pub gain_net: u32,  // Multiplicateur net (0, 1, 2, 35)
+    pub total_payout: u32,  // Total reçu au joueur (0 si perte, mise*(1+gain_net) si gain)
 }
 
 /// Ordre réel des numéros sur une roue européenne (sens horaire)
@@ -93,6 +95,6 @@ impl Roulette {
         let idx = rng.gen_range(0..=36);
         let number = EUROPEAN_WHEEL_ORDER[idx];
         let color = european_color_for_number(number);
-        RouletteResult { number, color, win: false }
+        RouletteResult { number, color, win: false, gain_net: 0, total_payout: 0 }
     }
 }

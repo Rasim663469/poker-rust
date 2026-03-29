@@ -25,17 +25,31 @@ pub struct RouletteAnim {
 
 impl super::CasinoApp {
     pub(super) fn ui_roulette(&mut self, ui: &mut egui::Ui) {
-        // Slider de mise
+        // Slider de mise (basé sur la banque du joueur)
         ui.horizontal(|ui| {
-            ui.label("Mise:");
-            if ui.add(egui::Slider::new(&mut self.roulette_mise, 1..=500).text("jetons")).changed() {
+            ui.label("Ta mise :");
+            let max_mise = self.banque_joueur.max(1);
+            // Ne remise à jour le clamping que si pas d'animation en cours (sinon le slider change pendant l'animation)
+            if self.roulette_anim.is_none() && self.roulette_mise > max_mise {
+                self.roulette_mise = max_mise;
+            }
+            if ui.add(egui::Slider::new(&mut self.roulette_mise, 1..=max_mise).text("jetons")).changed() {
                 self.roulette_last_result = None;  // Clear le résultat précédent quand on change la mise
             }
         });
         ui.add_space(10.0);
 
-        // Bouton Lancer la roue (désactivé si aucune mise)
-        if ui.add_enabled(self.roulette_bet != RouletteBetUI::None, egui::Button::new("Lancer la roue !")).clicked() && self.roulette_anim.is_none() {
+        // Message si pas assez d'argent
+        if self.banque_joueur < self.roulette_mise {
+            ui.colored_label(egui::Color32::RED, "Pas assez de jetons !");
+        }
+
+        // Bouton Lancer la roue (désactivé si aucune mise ou pas assez d'argent)
+        if ui.add_enabled(self.roulette_bet != RouletteBetUI::None && self.banque_joueur >= self.roulette_mise, egui::Button::new("Lancer la roue !")).clicked() && self.roulette_anim.is_none() {
+            // IMPORTANT: Stocker la mise AVANT de lancer, pour éviter le problème de clamping du slider
+            self.roulette_mise_en_jeu = self.roulette_mise;
+            // Déduire la mise IMMÉDIATEMENT
+            self.banque_joueur -= self.roulette_mise_en_jeu;
             self.roulette_last_result = None;  // Clear le résultat précédent
             let result = Roulette::spin();
             let mut rng = rand::thread_rng();
@@ -64,15 +78,42 @@ impl super::CasinoApp {
             highlight = Some(EUROPEAN_WHEEL_ORDER[idx]);
 
             if progress >= 1.0 {
-                // Animation terminée, afficher le résultat
+                // Animation terminée, calculer le résultat une seule fois
+                let final_result = RouletteResult {
+                    number: anim.final_number,
+                    color: european_color_for_number(anim.final_number),
+                    win: false,
+                    gain_net: 0,
+                    total_payout: 0,
+                };
+                
+                // Calculer le multiplicateur net
+                let bet_conv = bet_ui_to_roulette_bet(&self.roulette_bet);
+                let gain_net = gain_multiplier(bet_conv, &final_result);
+                
+                let has_won = gain_net > 0;
+                // IMPORTANT: Si tu gagnes, tu récupères (mise_en_jeu * (1 + gain_net))
+                //           Si tu perds, tu récupères 0 (la mise est déjà déduite)
+                if has_won {
+                    let total_à_récupérer = (self.roulette_mise_en_jeu as u32) * (1 + gain_net);
+                    self.banque_joueur += total_à_récupérer;
+                }
+                
+                // Stocker le résultat avec le multiplicateur et win flag
+                let total_payout = if has_won {
+                    (self.roulette_mise_en_jeu as u32) * (1 + gain_net)
+                } else {
+                    0
+                };
+                
                 let result = RouletteResult {
                     number: anim.final_number,
                     color: european_color_for_number(anim.final_number),
-                    win: {
-                        let bet_conv = bet_ui_to_roulette_bet(&self.roulette_bet);
-                        gain_multiplier(bet_conv, &RouletteResult { number: anim.final_number, color: european_color_for_number(anim.final_number), win: false }) > 0
-                    },
+                    win: has_won,
+                    gain_net,
+                    total_payout,
                 };
+                
                 self.roulette_last_result = Some(result);
                 self.roulette_anim = None;
             } else {
@@ -146,14 +187,13 @@ impl super::CasinoApp {
 
             ui.colored_label(col_resultat, egui::RichText::new(txt_resultat).heading());
 
-            // Affichage du multiplicateur et du gain
-            let bet_conv = bet_ui_to_roulette_bet(&self.roulette_bet);
-            let multiplier = gain_multiplier(bet_conv, result) as i32;
-            let gain = (self.roulette_mise as i32) * multiplier;
-
-            ui.add_space(5.0);
-            ui.colored_label(col_resultat, egui::RichText::new(format!("Multiplicateur : x{}", multiplier)).heading());
-            ui.colored_label(col_resultat, egui::RichText::new(format!("Gain total : {} jetons", gain)).heading());
+            // Affichage du multiplicateur et du gain TOTAL (inclus la mise) SEULEMENT si on a gagné
+            if result.win {
+                let multiplier_display = 1 + result.gain_net;
+                ui.add_space(5.0);
+                ui.colored_label(col_resultat, egui::RichText::new(format!("Multiplicateur : x{}", multiplier_display)).heading());
+                ui.colored_label(col_resultat, egui::RichText::new(format!("Gains reçus : {} jetons", result.total_payout)).heading());
+            }
         }
 
         // Return to menu button (top-left, like blackjack and slotmachine)
