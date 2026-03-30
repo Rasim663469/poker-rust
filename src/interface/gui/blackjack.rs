@@ -1,6 +1,6 @@
+use super::draw::{dessiner_carte, dessiner_jetons, dessiner_zone_label};
 use crate::games::blackjack::engine::{EtatBlackjack, JeuBlackjack};
 use eframe::egui;
-use super::draw::{dessiner_carte, dessiner_jetons, dessiner_zone_label};
 
 impl super::CasinoApp {
     pub(super) fn ui_blackjack(&mut self, ui: &mut egui::Ui) {
@@ -159,13 +159,16 @@ fn dessiner_table_blackjack(ui: &mut egui::Ui, rect: egui::Rect, jeu: &JeuBlackj
             dessiner_carte(ui, &painter, card_rect, Some(card), true);
         }
         if j.main.is_empty() {
-            let card_rect =
-                egui::Rect::from_min_size(egui::pos2(x_center - 28.0, cards_y), egui::vec2(56.0, 82.0));
+            let card_rect = egui::Rect::from_min_size(
+                egui::pos2(x_center - 28.0, cards_y),
+                egui::vec2(56.0, 82.0),
+            );
             dessiner_carte(ui, &painter, card_rect, None, false);
         }
     }
 
-    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 58.0), egui::vec2(210.0, 48.0));
+    let pot_rect =
+        egui::Rect::from_center_size(egui::pos2(c.x, c.y + 58.0), egui::vec2(210.0, 48.0));
     painter.rect_filled(pot_rect, 10.0, egui::Color32::from_rgb(11, 41, 30));
     painter.rect_stroke(
         pot_rect,

@@ -7,8 +7,8 @@ impl super::CasinoApp {
         ui.vertical_centered(|ui| {
             ui.heading("Machine a sous");
             ui.add_space(20.0);
-            let highlight =
-                self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
+            let highlight = self.slot_symbols[0] == self.slot_symbols[1]
+                && self.slot_symbols[1] == self.slot_symbols[2];
             dessiner_slot_machine(ui, &self.slot_symbols, highlight);
             ui.add_space(10.0);
             ui.horizontal(|ui| {

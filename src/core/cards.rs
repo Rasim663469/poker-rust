@@ -1,7 +1,7 @@
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 use tokio::runtime::Handle;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -45,7 +45,12 @@ pub struct Paquet {
 impl Paquet {
     pub fn nouveau() -> Self {
         let mut cartes = Vec::with_capacity(52);
-        for &couleur in &[Couleur::Coeur, Couleur::Carreau, Couleur::Trefle, Couleur::Pique] {
+        for &couleur in &[
+            Couleur::Coeur,
+            Couleur::Carreau,
+            Couleur::Trefle,
+            Couleur::Pique,
+        ] {
             for &valeur in &[
                 Valeur::Deux,
                 Valeur::Trois,
@@ -94,9 +99,7 @@ impl Paquet {
         }
         self.cartes.pop()
     }
-
 }
-
 
 impl Valeur {
     pub fn en_u8(self) -> u8 {
@@ -157,14 +160,20 @@ impl fmt::Display for Carte {
     }
 }
 
-
 impl Carte {
     pub fn code_api(&self) -> String {
-        format!("{}{}", valeur_code_api(self.valeur), couleur_code_api(self.couleur))
+        format!(
+            "{}{}",
+            valeur_code_api(self.valeur),
+            couleur_code_api(self.couleur)
+        )
     }
 
     pub fn image_url_api(&self) -> String {
-        format!("https://deckofcardsapi.com/static/img/{}.png", self.code_api())
+        format!(
+            "https://deckofcardsapi.com/static/img/{}.png",
+            self.code_api()
+        )
     }
 }
 
@@ -226,7 +235,10 @@ fn api_tirer_carte(deck_id: &str) -> Option<Carte> {
     if est_dans_runtime_tokio() {
         return None;
     }
-    let url = format!("https://deckofcardsapi.com/api/deck/{}/draw/?count=1", deck_id);
+    let url = format!(
+        "https://deckofcardsapi.com/api/deck/{}/draw/?count=1",
+        deck_id
+    );
     let resp = reqwest::blocking::get(url).ok()?;
     let payload: ApiDrawResponse = resp.json().ok()?;
     if !payload.success {

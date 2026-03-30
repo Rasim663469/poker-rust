@@ -9,7 +9,11 @@ pub async fn run_poker_client(addr: &str) -> io::Result<()> {
     send_json(
         &mut stream,
         &MessageClient::Connexion {
-            pseudo: if pseudo.is_empty() { "Joueur".to_string() } else { pseudo },
+            pseudo: if pseudo.is_empty() {
+                "Joueur".to_string()
+            } else {
+                pseudo
+            },
         },
     )
     .await?;
@@ -33,7 +37,10 @@ pub async fn run_poker_client(addr: &str) -> io::Result<()> {
                     .join(" ");
                 println!("Tes cartes: {main}");
             }
-            MessageServeur::MajTable { pot, cartes_communes } => {
+            MessageServeur::MajTable {
+                pot,
+                cartes_communes,
+            } => {
                 let board = cartes_communes
                     .iter()
                     .map(|c| c.to_string())

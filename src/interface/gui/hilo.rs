@@ -1,6 +1,6 @@
+use super::draw::dessiner_carte;
 use crate::games::hilo::{AceMode, HiLoConfig, HiLoGame, HiLoGuess, HiLoState};
 use eframe::egui;
-use super::draw::dessiner_carte;
 
 impl super::CasinoApp {
     pub(super) fn ui_hilo(&mut self, ui: &mut egui::Ui) {
@@ -142,19 +142,23 @@ impl super::CasinoApp {
 
         ui.add_space(10.0);
         ui.label("Historique:");
-        egui::ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
-            for h in game.history.iter().rev() {
-                let tag = if h.win { "WIN" } else if h.tie { "TIE" } else { "LOSE" };
-                ui.label(format!(
-                    "{}: {} -> {} | {:?} | +{}",
-                    tag,
-                    h.current,
-                    h.next,
-                    h.guess,
-                    h.payout
-                ));
-            }
-        });
+        egui::ScrollArea::vertical()
+            .max_height(140.0)
+            .show(ui, |ui| {
+                for h in game.history.iter().rev() {
+                    let tag = if h.win {
+                        "WIN"
+                    } else if h.tie {
+                        "TIE"
+                    } else {
+                        "LOSE"
+                    };
+                    ui.label(format!(
+                        "{}: {} -> {} | {:?} | +{}",
+                        tag, h.current, h.next, h.guess, h.payout
+                    ));
+                }
+            });
 
         if reset_table {
             self.hilo = None;
@@ -183,14 +187,10 @@ fn dessiner_table_hilo(
     );
 
     let c = table.center();
-    let current_rect = egui::Rect::from_min_size(
-        egui::pos2(c.x - 110.0, c.y - 40.0),
-        egui::vec2(80.0, 120.0),
-    );
-    let next_rect = egui::Rect::from_min_size(
-        egui::pos2(c.x + 30.0, c.y - 40.0),
-        egui::vec2(80.0, 120.0),
-    );
+    let current_rect =
+        egui::Rect::from_min_size(egui::pos2(c.x - 110.0, c.y - 40.0), egui::vec2(80.0, 120.0));
+    let next_rect =
+        egui::Rect::from_min_size(egui::pos2(c.x + 30.0, c.y - 40.0), egui::vec2(80.0, 120.0));
 
     let current = game.current.as_ref();
     dessiner_carte(ui, &painter, current_rect, current, current.is_some());

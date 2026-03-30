@@ -141,7 +141,9 @@ impl HiLoGame {
         if guess == HiLoGuess::Equal && !self.config.allow_equal {
             return Err("Le choix Equal n'est pas autorise.".to_string());
         }
-        let current = self.current.ok_or_else(|| "Carte courante manquante".to_string())?;
+        let current = self
+            .current
+            .ok_or_else(|| "Carte courante manquante".to_string())?;
         let next = self
             .paquet
             .tirer_carte()
@@ -255,9 +257,15 @@ mod tests {
                 ..HiLoConfig::default()
             },
         );
-        game.current = Some(Carte { valeur: Valeur::Dix, couleur: crate::core::cards::Couleur::Coeur });
+        game.current = Some(Carte {
+            valeur: Valeur::Dix,
+            couleur: crate::core::cards::Couleur::Coeur,
+        });
         game.etat = HiLoState::EnAttenteChoix;
-        game.paquet.cartes.push(Carte { valeur: Valeur::Dix, couleur: crate::core::cards::Couleur::Pique });
+        game.paquet.cartes.push(Carte {
+            valeur: Valeur::Dix,
+            couleur: crate::core::cards::Couleur::Pique,
+        });
         let res = game.guess(HiLoGuess::Higher).unwrap();
         assert!(res.tie);
         assert!(!res.win);
@@ -273,9 +281,15 @@ mod tests {
                 ..HiLoConfig::default()
             },
         );
-        game.current = Some(Carte { valeur: Valeur::Dix, couleur: crate::core::cards::Couleur::Coeur });
+        game.current = Some(Carte {
+            valeur: Valeur::Dix,
+            couleur: crate::core::cards::Couleur::Coeur,
+        });
         game.etat = HiLoState::EnAttenteChoix;
-        game.paquet.cartes.push(Carte { valeur: Valeur::Dix, couleur: crate::core::cards::Couleur::Pique });
+        game.paquet.cartes.push(Carte {
+            valeur: Valeur::Dix,
+            couleur: crate::core::cards::Couleur::Pique,
+        });
         game.mise = 10;
         let res = game.guess(HiLoGuess::Equal).unwrap();
         assert!(res.tie);

@@ -23,12 +23,13 @@ pub async fn run_poker_server(addr: &str) -> io::Result<()> {
     println!("Hote connecte: {host_name} ({host_addr})");
 
     send_json(&mut host_stream, &MessageServeur::DemanderConfiguration).await?;
-    let (nb_joueurs_cfg, jetons_depart) = match recv_json::<MessageClient, _>(&mut host_stream).await? {
-        MessageClient::Action(ActionJoueur::ConfigurerPartie { nb_joueurs, jetons }) => {
-            (nb_joueurs.clamp(2, 6) as usize, jetons.max(50))
-        }
-        _ => (2, 1000),
-    };
+    let (nb_joueurs_cfg, jetons_depart) =
+        match recv_json::<MessageClient, _>(&mut host_stream).await? {
+            MessageClient::Action(ActionJoueur::ConfigurerPartie { nb_joueurs, jetons }) => {
+                (nb_joueurs.clamp(2, 6) as usize, jetons.max(50))
+            }
+            _ => (2, 1000),
+        };
 
     let nb_joueurs = nb_joueurs_cfg;
     println!("Configuration: {nb_joueurs} joueurs, {jetons_depart} jetons.");
@@ -95,13 +96,7 @@ pub async fn run_poker_server(addr: &str) -> io::Result<()> {
             break;
         }
 
-        jouer_manche(
-            &mut joueurs,
-            &mut dealer_idx,
-            small_blind,
-            big_blind,
-        )
-        .await?;
+        jouer_manche(&mut joueurs, &mut dealer_idx, small_blind, big_blind).await?;
     }
 
     Ok(())
@@ -166,9 +161,20 @@ async fn jouer_manche(
 
     for i in participants.iter().copied() {
         let cartes = joueurs[i].main.clone();
-        send_json(&mut joueurs[i].stream, &MessageServeur::MesCartes { cartes }).await?;
+        send_json(
+            &mut joueurs[i].stream,
+            &MessageServeur::MesCartes { cartes },
+        )
+        .await?;
     }
-    broadcast(joueurs, &MessageServeur::MajTable { pot, cartes_communes: board.clone() }).await?;
+    broadcast(
+        joueurs,
+        &MessageServeur::MajTable {
+            pot,
+            cartes_communes: board.clone(),
+        },
+    )
+    .await?;
 
     let start_preflop = next_participant(participants.as_slice(), bb_idx);
     tour_mises(
@@ -191,7 +197,14 @@ async fn jouer_manche(
     mise_actuelle = 0;
     burn(&mut paquet);
     tirer_board(&mut paquet, &mut board, 3);
-    broadcast(joueurs, &MessageServeur::MajTable { pot, cartes_communes: board.clone() }).await?;
+    broadcast(
+        joueurs,
+        &MessageServeur::MajTable {
+            pot,
+            cartes_communes: board.clone(),
+        },
+    )
+    .await?;
     let start_postflop = next_participant(participants.as_slice(), *dealer_idx);
     tour_mises(
         joueurs,
@@ -213,7 +226,14 @@ async fn jouer_manche(
     mise_actuelle = 0;
     burn(&mut paquet);
     tirer_board(&mut paquet, &mut board, 1);
-    broadcast(joueurs, &MessageServeur::MajTable { pot, cartes_communes: board.clone() }).await?;
+    broadcast(
+        joueurs,
+        &MessageServeur::MajTable {
+            pot,
+            cartes_communes: board.clone(),
+        },
+    )
+    .await?;
     tour_mises(
         joueurs,
         &participants,
@@ -234,7 +254,14 @@ async fn jouer_manche(
     mise_actuelle = 0;
     burn(&mut paquet);
     tirer_board(&mut paquet, &mut board, 1);
-    broadcast(joueurs, &MessageServeur::MajTable { pot, cartes_communes: board.clone() }).await?;
+    broadcast(
+        joueurs,
+        &MessageServeur::MajTable {
+            pot,
+            cartes_communes: board.clone(),
+        },
+    )
+    .await?;
     tour_mises(
         joueurs,
         &participants,
@@ -340,8 +367,7 @@ async fn tour_mises(
                     joueurs[idx].mise_tour += paye;
                     *pot += paye;
                     besoin_action[idx] = false;
-                    announce(joueurs, idx, format!("call {paye} (raise invalide)"))
-                        .await?;
+                    announce(joueurs, idx, format!("call {paye} (raise invalide)")).await?;
                 } else {
                     let delta = total.saturating_sub(joueurs[idx].mise_tour);
                     joueurs[idx].jetons -= delta;
@@ -391,10 +417,7 @@ fn reset_mises(joueurs: &mut [RemotePlayer], participants: &[usize]) {
 }
 
 fn actifs_non_couches(joueurs: &[RemotePlayer], participants: &[usize]) -> usize {
-    participants
-        .iter()
-        .filter(|&&i| !joueurs[i].couche)
-        .count()
+    participants.iter().filter(|&&i| !joueurs[i].couche).count()
 }
 
 fn next_participant(participants: &[usize], from: usize) -> usize {

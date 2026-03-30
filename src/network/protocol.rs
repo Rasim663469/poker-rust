@@ -18,15 +18,27 @@ pub enum MessageClient {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageServeur {
-    Bienvenue { message: String },
-    MesCartes { cartes: Vec<Carte> },
-    MajTable { pot: u32, cartes_communes: Vec<Carte> },
+    Bienvenue {
+        message: String,
+    },
+    MesCartes {
+        cartes: Vec<Carte>,
+    },
+    MajTable {
+        pot: u32,
+        cartes_communes: Vec<Carte>,
+    },
     DemanderAction {
         to_call: u32,
         peut_relancer: bool,
         jetons_restants: u32,
     },
-    AnnonceAction { nom: String, action: String },
+    AnnonceAction {
+        nom: String,
+        action: String,
+    },
     DemanderConfiguration,
-    Erreur { message: String },
+    Erreur {
+        message: String,
+    },
 }

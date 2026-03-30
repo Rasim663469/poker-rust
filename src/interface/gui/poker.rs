@@ -1,5 +1,5 @@
+use super::draw::{dessiner_carte, dessiner_jetons, dessiner_joueur_zone};
 use super::{PokerVue, Street, TourJoueur};
-use super::draw::{dessiner_carte, dessiner_joueur_zone, dessiner_jetons};
 use crate::core::cards::{Carte, Paquet};
 use crate::core::player::Joueur;
 use crate::games::poker::engine::evaluer_holdem_pour_gui;
@@ -136,7 +136,8 @@ impl PokerGuiGame {
     }
 
     fn to_call(&self, joueur: TourJoueur) -> u32 {
-        self.mise_actuelle.saturating_sub(self.joueur(joueur).mise_tour)
+        self.mise_actuelle
+            .saturating_sub(self.joueur(joueur).mise_tour)
     }
 
     fn total_min_raise(&self) -> u32 {
@@ -252,7 +253,8 @@ impl PokerGuiGame {
 
     fn avancer_tour(&mut self) {
         let autre = Self::autre(self.tour);
-        if self.besoin_action(autre) && !self.joueur(autre).couche && self.joueur(autre).jetons > 0 {
+        if self.besoin_action(autre) && !self.joueur(autre).couche && self.joueur(autre).jetons > 0
+        {
             self.tour = autre;
             return;
         }
@@ -592,7 +594,8 @@ fn dessiner_table_solo(ui: &mut egui::Ui, rect: egui::Rect, game: &PokerGuiGame)
         dessiner_carte(ui, &painter, card_rect, card, card.is_some());
     }
 
-    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 62.0), egui::vec2(180.0, 46.0));
+    let pot_rect =
+        egui::Rect::from_center_size(egui::pos2(c.x, c.y + 62.0), egui::vec2(180.0, 46.0));
     painter.rect_filled(pot_rect, 10.0, egui::Color32::from_rgb(11, 41, 30));
     painter.rect_stroke(
         pot_rect,
@@ -607,10 +610,22 @@ fn dessiner_table_solo(ui: &mut egui::Ui, rect: egui::Rect, game: &PokerGuiGame)
         egui::FontId::proportional(22.0),
         egui::Color32::from_rgb(238, 220, 151),
     );
-    dessiner_jetons(&painter, egui::pos2(pot_rect.left() - 34.0, pot_rect.center().y), 3);
-    dessiner_jetons(&painter, egui::pos2(pot_rect.right() + 24.0, pot_rect.center().y), 4);
+    dessiner_jetons(
+        &painter,
+        egui::pos2(pot_rect.left() - 34.0, pot_rect.center().y),
+        3,
+    );
+    dessiner_jetons(
+        &painter,
+        egui::pos2(pot_rect.right() + 24.0, pot_rect.center().y),
+        4,
+    );
 
-    let bot_name = if game.tour == TourJoueur::Bot { "Bot - son tour" } else { "Bot" };
+    let bot_name = if game.tour == TourJoueur::Bot {
+        "Bot - son tour"
+    } else {
+        "Bot"
+    };
     dessiner_joueur_zone(
         &painter,
         egui::Rect::from_center_size(
@@ -621,7 +636,11 @@ fn dessiner_table_solo(ui: &mut egui::Ui, rect: egui::Rect, game: &PokerGuiGame)
         game.bot.jetons,
         game.bot.mise_tour,
     );
-    let hero_name = if game.tour == TourJoueur::Hero { "Toi - ton tour" } else { "Toi" };
+    let hero_name = if game.tour == TourJoueur::Hero {
+        "Toi - ton tour"
+    } else {
+        "Toi"
+    };
     dessiner_joueur_zone(
         &painter,
         egui::Rect::from_center_size(

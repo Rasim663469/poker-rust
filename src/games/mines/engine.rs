@@ -16,9 +16,9 @@ pub enum EtatMines {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CaseMine {
     Cachee,
-    Revelee,       // gemme trouvée
-    MineRevelee,   // mine (fin de partie)
-    MineMontree,   // mine révélée après fin (pas clickée)
+    Revelee,     // gemme trouvée
+    MineRevelee, // mine (fin de partie)
+    MineMontree, // mine révélée après fin (pas clickée)
 }
 
 // ─── Jeu ────────────────────────────────────────────────────────────
@@ -61,12 +61,8 @@ impl JeuMines {
         }
 
         let hash_graine_serveur = hex_sha256(&graine_serveur);
-        let positions_mines = generer_positions_mines(
-            &graine_serveur,
-            &graine_client,
-            nonce,
-            nb_mines,
-        );
+        let positions_mines =
+            generer_positions_mines(&graine_serveur, &graine_client, nonce, nb_mines);
 
         Ok(Self {
             grille: [[CaseMine::Cachee; 5]; 5],
@@ -237,7 +233,7 @@ fn generer_positions_mines(
 ) -> Vec<(usize, usize)> {
     // HMAC-SHA256(key = server_seed, data = client_seed:nonce:round)
     let mut indices: Vec<usize> = (0..25).collect();
-    
+
     for i in 0..nb_mines as usize {
         let data = format!("{}:{}:{}", graine_client, nonce, i);
         let mut mac = HmacSha256::new_from_slice(graine_serveur.as_bytes())

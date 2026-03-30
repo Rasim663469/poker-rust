@@ -1,11 +1,16 @@
 use crate::games::blackjack::engine::JeuBlackjack;
+use crate::games::crash::engine::JeuCrash;
 use crate::games::hilo::AceMode;
+use crate::games::mines::engine::JeuMines;
 use eframe::egui;
 use std::sync::mpsc;
+use std::time::Instant;
 
 mod blackjack;
+mod crash;
 mod draw;
 mod hilo;
+mod mines;
 mod poker;
 mod poker_online;
 mod slotmachine;
@@ -20,6 +25,8 @@ enum EcranCasino {
     Blackjack,
     SlotMachine,
     HiLo,
+    Mines,
+    Crash,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,6 +92,24 @@ pub struct CasinoApp {
     hilo_max_bet: u32,
     hilo_last_outcome: Option<crate::games::hilo::HiLoOutcome>,
     hilo_reveal_at: Option<std::time::Instant>,
+    // Mines
+    mines: Option<JeuMines>,
+    mines_nb_mines: u8,
+    mines_mise_input: f64,
+    mines_graine_client: String,
+    mines_autoplay_count: u8,
+    mines_nonce: u64,
+    mines_solde: f64,
+    mines_ui_erreur: String,
+    mines_paiement_applique: bool,
+    // Crash
+    crash: JeuCrash,
+    crash_mise_input: f64,
+    crash_auto_cashout: f64,
+    crash_auto_actif: bool,
+    crash_solde: f64,
+    crash_ui_erreur: String,
+    crash_last_tick: Instant,
 }
 
 impl Default for CasinoApp {
@@ -116,6 +141,24 @@ impl Default for CasinoApp {
             hilo_max_bet: 1000,
             hilo_last_outcome: None,
             hilo_reveal_at: None,
+            // Mines
+            mines: None,
+            mines_nb_mines: 3,
+            mines_mise_input: 50.0,
+            mines_graine_client: "player123".to_string(),
+            mines_autoplay_count: 3,
+            mines_nonce: 1,
+            mines_solde: 2000.0,
+            mines_ui_erreur: String::new(),
+            mines_paiement_applique: true,
+            // Crash
+            crash: JeuCrash::nouveau(),
+            crash_mise_input: 50.0,
+            crash_auto_cashout: 2.0,
+            crash_auto_actif: false,
+            crash_solde: 2000.0,
+            crash_ui_erreur: String::new(),
+            crash_last_tick: Instant::now(),
         }
     }
 }
@@ -131,6 +174,21 @@ impl eframe::App for CasinoApp {
             bj.avancer_automatique();
         }
 
+        let maintenant = Instant::now();
+        let delta = (maintenant - self.crash_last_tick).as_secs_f32();
+        self.crash_last_tick = maintenant;
+        if self.crash.manche_en_cours() {
+            self.crash.avancer(delta);
+            if self.crash_auto_actif
+                && self.crash.est_en_vol()
+                && self.crash.multiplicateur_vol() >= self.crash_auto_cashout.max(1.01)
+            {
+                if let Ok(paiement) = self.crash.encaisser_a(self.crash_auto_cashout.max(1.01)) {
+                    self.crash_solde += paiement;
+                }
+            }
+        }
+
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Casino Rust");
@@ -141,7 +199,25 @@ impl eframe::App for CasinoApp {
                     EcranCasino::Blackjack => "Blackjack jouable en GUI",
                     EcranCasino::SlotMachine => "Machine a sous",
                     EcranCasino::HiLo => "Hi-Lo",
+                    EcranCasino::Mines => "Mines jouable en GUI",
+                    EcranCasino::Crash => "Crash jouable en GUI",
                 });
+                if self.ecran == EcranCasino::Mines {
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(format!("Balance Mines: {:.2}", self.mines_solde))
+                            .strong()
+                            .color(egui::Color32::from_rgb(247, 211, 88)),
+                    );
+                }
+                if self.ecran == EcranCasino::Crash {
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(format!("Balance Crash: {:.2}", self.crash_solde))
+                            .strong()
+                            .color(egui::Color32::from_rgb(247, 211, 88)),
+                    );
+                }
             });
         });
 
@@ -151,6 +227,8 @@ impl eframe::App for CasinoApp {
             EcranCasino::Blackjack => self.ui_blackjack(ui),
             EcranCasino::SlotMachine => self.ui_slot_machine(ui),
             EcranCasino::HiLo => self.ui_hilo(ui),
+            EcranCasino::Mines => self.ui_mines(ui),
+            EcranCasino::Crash => self.ui_crash(ui),
         });
 
         ctx.request_repaint_after(std::time::Duration::from_millis(80));
@@ -176,6 +254,12 @@ impl CasinoApp {
         }
         if ui.button("Hi-Lo").clicked() {
             self.ecran = EcranCasino::HiLo;
+        }
+        if ui.button("Mines").clicked() {
+            self.ecran = EcranCasino::Mines;
+        }
+        if ui.button("Crash").clicked() {
+            self.ecran = EcranCasino::Crash;
         }
     }
 }

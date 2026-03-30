@@ -59,7 +59,11 @@ impl JeuBlackjack {
 
         let nb = nb_joueurs.clamp(2, 6);
         let mut joueurs = Vec::with_capacity(nb);
-        joueurs.push(JoueurBlackjack::nouveau("Toi".to_string(), false, jetons_depart));
+        joueurs.push(JoueurBlackjack::nouveau(
+            "Toi".to_string(),
+            false,
+            jetons_depart,
+        ));
         for i in 1..nb {
             joueurs.push(JoueurBlackjack::nouveau(
                 format!("Bot{}", i),

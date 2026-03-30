@@ -49,7 +49,12 @@ pub struct Partie {
 }
 
 impl Partie {
-    pub fn nouvelle(noms: Vec<String>, jetons_depart: u32, small_blind: u32, big_blind: u32) -> Self {
+    pub fn nouvelle(
+        noms: Vec<String>,
+        jetons_depart: u32,
+        small_blind: u32,
+        big_blind: u32,
+    ) -> Self {
         let joueurs = noms
             .into_iter()
             .map(|nom| Joueur::nouveau(nom, jetons_depart))
@@ -259,7 +264,10 @@ impl Partie {
             let a_payer = (*mise_actuelle).saturating_sub(self.joueurs[idx].mise_tour);
             println!(
                 "{}: jetons={}, mise ce tour={}, a payer={}",
-                self.joueurs[idx].nom, self.joueurs[idx].jetons, self.joueurs[idx].mise_tour, a_payer
+                self.joueurs[idx].nom,
+                self.joueurs[idx].jetons,
+                self.joueurs[idx].mise_tour,
+                a_payer
             );
 
             if a_payer == 0 {
@@ -286,7 +294,10 @@ impl Partie {
                             continue;
                         }
                         let total = demander_u32(
-                            &format!("Montant total de ta mise pour ce tour ({}..={}): ", min, max),
+                            &format!(
+                                "Montant total de ta mise pour ce tour ({}..={}): ",
+                                min, max
+                            ),
                             min,
                             max,
                         );
@@ -296,7 +307,8 @@ impl Partie {
                         self.pot += delta;
                         *mise_actuelle = total;
                         for j in 0..self.joueurs.len() {
-                            besoin_action[j] = !self.joueurs[j].couche && self.joueurs[j].jetons > 0;
+                            besoin_action[j] =
+                                !self.joueurs[j].couche && self.joueurs[j].jetons > 0;
                         }
                         besoin_action[idx] = false;
                         println!("{} relance a {}.", self.joueurs[idx].nom, total);
@@ -319,14 +331,18 @@ impl Partie {
                         println!("{} fold.", self.joueurs[idx].nom);
                     }
                     "r" => {
-                        let min = (*mise_actuelle + self.big_blind).max(self.joueurs[idx].mise_tour + a_payer + 1);
+                        let min = (*mise_actuelle + self.big_blind)
+                            .max(self.joueurs[idx].mise_tour + a_payer + 1);
                         let max = self.joueurs[idx].mise_tour + self.joueurs[idx].jetons;
                         if min > max {
                             println!("Relance impossible, tu peux seulement suivre ou fold.");
                             continue;
                         }
                         let total = demander_u32(
-                            &format!("Montant total de ta mise pour ce tour ({}..={}): ", min, max),
+                            &format!(
+                                "Montant total de ta mise pour ce tour ({}..={}): ",
+                                min, max
+                            ),
                             min,
                             max,
                         );
@@ -336,7 +352,8 @@ impl Partie {
                         self.pot += delta;
                         *mise_actuelle = total;
                         for j in 0..self.joueurs.len() {
-                            besoin_action[j] = !self.joueurs[j].couche && self.joueurs[j].jetons > 0;
+                            besoin_action[j] =
+                                !self.joueurs[j].couche && self.joueurs[j].jetons > 0;
                         }
                         besoin_action[idx] = false;
                         println!("{} relance a {}.", self.joueurs[idx].nom, total);
@@ -363,7 +380,10 @@ impl Partie {
     }
 
     fn nb_actifs_non_couches(&self) -> usize {
-        self.joueurs.iter().filter(|j| !j.couche && (j.jetons > 0 || !j.main.is_empty())).count()
+        self.joueurs
+            .iter()
+            .filter(|j| !j.couche && (j.jetons > 0 || !j.main.is_empty()))
+            .count()
     }
 
     fn nb_joueurs_avec_jetons(&self) -> usize {
@@ -428,7 +448,11 @@ impl Partie {
 
 pub fn evaluer_holdem_pour_gui(cartes: &[Carte]) -> (u8, Vec<u8>, String) {
     let e = evaluer_holdem(cartes);
-    (e.rang as u8, e.departage.clone(), nom_rang(e.rang).to_string())
+    (
+        e.rang as u8,
+        e.departage.clone(),
+        nom_rang(e.rang).to_string(),
+    )
 }
 
 fn nom_rang(rang: RangMain) -> &'static str {
@@ -485,10 +509,7 @@ fn evaluer_5(main: &[Carte; 5]) -> MainEvaluee {
         *freqs.entry(*v).or_insert(0) += 1;
     }
 
-    let mut groupes = freqs
-        .into_iter()
-        .map(|(v, n)| (n, v))
-        .collect::<Vec<_>>();
+    let mut groupes = freqs.into_iter().map(|(v, n)| (n, v)).collect::<Vec<_>>();
     groupes.sort_by(|a, b| b.cmp(a));
 
     if couleur {

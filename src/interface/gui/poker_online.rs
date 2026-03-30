@@ -1,7 +1,7 @@
+use super::draw::{dessiner_carte, dessiner_joueur_zone};
 use crate::network::protocol::{ActionJoueur, MessageClient, MessageServeur};
 use crate::network::{recv_json, send_json};
 use eframe::egui;
-use super::draw::{dessiner_carte, dessiner_joueur_zone};
 use std::sync::mpsc;
 use std::thread;
 use tokio::net::TcpStream;
@@ -59,9 +59,14 @@ impl super::CasinoApp {
                     }
                     MessageServeur::MesCartes { cartes } => {
                         self.poker_online.main = cartes;
-                        self.poker_online.logs.push("--- Nouvelle main ---".to_string());
+                        self.poker_online
+                            .logs
+                            .push("--- Nouvelle main ---".to_string());
                     }
-                    MessageServeur::MajTable { pot, cartes_communes } => {
+                    MessageServeur::MajTable {
+                        pot,
+                        cartes_communes,
+                    } => {
                         self.poker_online.pot = pot;
                         self.poker_online.board = cartes_communes;
                     }
@@ -201,11 +206,13 @@ impl super::CasinoApp {
 
         ui.separator();
         ui.label("Historique:");
-        egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-            for l in self.poker_online.logs.iter().rev().take(60).rev() {
-                ui.label(l);
-            }
-        });
+        egui::ScrollArea::vertical()
+            .max_height(200.0)
+            .show(ui, |ui| {
+                for l in self.poker_online.logs.iter().rev().take(60).rev() {
+                    ui.label(l);
+                }
+            });
     }
 
     pub(super) fn demarrer_client_online(&mut self) {
@@ -357,7 +364,8 @@ fn dessiner_table_online(ui: &mut egui::Ui, rect: egui::Rect, state: &OnlinePoke
         dessiner_carte(ui, &painter, card_rect, card, card.is_some());
     }
 
-    let pot_rect = egui::Rect::from_center_size(egui::pos2(c.x, c.y + 62.0), egui::vec2(200.0, 46.0));
+    let pot_rect =
+        egui::Rect::from_center_size(egui::pos2(c.x, c.y + 62.0), egui::vec2(200.0, 46.0));
     painter.rect_filled(pot_rect, 10.0, egui::Color32::from_rgb(11, 41, 30));
     painter.rect_stroke(
         pot_rect,
@@ -389,7 +397,11 @@ fn dessiner_table_online(ui: &mut egui::Ui, rect: egui::Rect, state: &OnlinePoke
             egui::pos2(c.x, table_rect.bottom() - 40.0),
             egui::vec2(340.0, 56.0),
         ),
-        if state.en_attente_action { "Toi - ton tour" } else { "Toi" },
+        if state.en_attente_action {
+            "Toi - ton tour"
+        } else {
+            "Toi"
+        },
         state.jetons_restants,
         state.to_call,
     );
