@@ -21,8 +21,20 @@ pub async fn run_poker_server(addr: &str, pool: DbPool) -> io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     println!("Serveur poker en ecoute sur {addr}");
 
-    let (mut host_stream, host_addr) = listener.accept().await?;
-    let (host_id, host_name, host_jetons) = authentifier_joueur(&mut host_stream, &pool).await?;
+    let (host_id, host_name, host_jetons, host_addr, mut host_stream) = loop {
+        let (mut stream, remote_addr) = listener.accept().await?;
+        match authentifier_joueur(&mut stream, &pool).await {
+            Ok((db_id, nom, jetons)) => break (db_id, nom, jetons, remote_addr, stream),
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                eprintln!("Connexion fermee trop tot par {remote_addr}, en attente d'un autre client...");
+                continue;
+            }
+            Err(err) => {
+                eprintln!("Echec authentification depuis {remote_addr}: {err}");
+                continue;
+            }
+        }
+    };
     println!("Hote connecte: {host_name} ({host_addr})");
 
     send_json(&mut host_stream, &MessageServeur::DemanderConfiguration).await?;
@@ -49,7 +61,17 @@ pub async fn run_poker_server(addr: &str, pool: DbPool) -> io::Result<()> {
 
     while joueurs.len() < nb_joueurs {
         let (mut stream, addr) = listener.accept().await?;
-        let (db_id, pseudo, jetons) = authentifier_joueur(&mut stream, &pool).await?;
+        let (db_id, pseudo, jetons) = match authentifier_joueur(&mut stream, &pool).await {
+            Ok(auth) => auth,
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                eprintln!("Connexion fermee trop tot par {addr}, joueur ignore.");
+                continue;
+            }
+            Err(err) => {
+                eprintln!("Echec authentification depuis {addr}: {err}");
+                continue;
+            }
+        };
         println!("Joueur connecte: {pseudo} ({addr})");
         send_json(
             &mut stream,
@@ -507,6 +529,27 @@ async fn authentifier_joueur(
     loop {
         let msg: MessageClient = recv_json(stream).await?;
         match msg {
+            MessageClient::Session { db_id, pseudo } => {
+                match joueur_repo::charger_par_id(pool, db_id).await {
+                    Ok(Some(j)) if j.pseudo == pseudo => {
+                        send_json(stream, &MessageServeur::AuthOk { jetons: j.jetons as u32 }).await?;
+                        return Ok((j.id, j.pseudo, j.jetons as u32));
+                    }
+                    Ok(Some(_)) => {
+                        send_json(stream, &MessageServeur::AuthEchec {
+                            raison: "Session invalide: pseudo incoherent.".to_string(),
+                        }).await?;
+                    }
+                    Ok(None) => {
+                        send_json(stream, &MessageServeur::AuthEchec {
+                            raison: "Session invalide: joueur introuvable.".to_string(),
+                        }).await?;
+                    }
+                    Err(e) => {
+                        send_json(stream, &MessageServeur::AuthEchec { raison: e }).await?;
+                    }
+                }
+            }
             MessageClient::Login { pseudo, mot_de_passe } => {
                 match joueur_repo::authentifier(pool, &pseudo, &mot_de_passe).await {
                     Ok(Some(j)) => {

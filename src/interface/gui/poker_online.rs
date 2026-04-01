@@ -9,9 +9,6 @@ use tokio::net::TcpStream;
 
 pub(super) struct OnlinePokerState {
     pub(super) adresse: String,
-    pub(super) pseudo: String,
-    pub(super) mot_de_passe: String,
-    pub(super) inscription: bool,
     pub(super) est_hote: bool,
     pub(super) nb_joueurs: u32,
     pub(super) jetons_depart: u32,
@@ -31,10 +28,7 @@ pub(super) struct OnlinePokerState {
 impl Default for OnlinePokerState {
     fn default() -> Self {
         Self {
-            adresse: "127.0.0.1:8080".to_string(),
-            pseudo: String::new(),
-            mot_de_passe: String::new(),
-            inscription: false,
+            adresse: "127.0.0.1:9090".to_string(),
             est_hote: false,
             nb_joueurs: 2,
             jetons_depart: 1000,
@@ -128,19 +122,25 @@ impl super::CasinoApp {
                         ui.label("Adresse:");
                         ui.text_edit_singleline(&mut self.poker_online.adresse);
                     });
-                    ui.horizontal(|ui| {
-                        ui.label("Pseudo:");
-                        ui.text_edit_singleline(&mut self.poker_online.pseudo);
-                    });
+                    ui.label(format!("Session: {}", self.joueur_pseudo));
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Capital disponible: {} jetons",
+                            self.banque_joueur
+                        ))
+                        .color(TEXT_DIM),
+                    );
                     ui.checkbox(&mut self.poker_online.est_hote, "Je suis l'hote");
                     if self.poker_online.est_hote {
                         ui.add(
                             egui::Slider::new(&mut self.poker_online.nb_joueurs, 2..=6)
                                 .text("Nombre de joueurs"),
                         );
-                        ui.add(
-                            egui::Slider::new(&mut self.poker_online.jetons_depart, 50..=10_000)
-                                .text("Jetons de depart"),
+                        ui.label(
+                            egui::RichText::new(
+                                "Le solde des joueurs vient de leur compte, pas d'un capital fixe de table."
+                            )
+                            .color(TEXT_DIM),
                         );
                     }
                 });
@@ -239,13 +239,25 @@ impl super::CasinoApp {
             return;
         }
 
-        let adresse = self.poker_online.adresse.clone();
-        let pseudo = self.poker_online.pseudo.clone();
-        let mot_de_passe = self.poker_online.mot_de_passe.clone();
-        let inscription = self.poker_online.inscription;
+        let adresse = self.poker_online.adresse.trim().to_string();
+        let pseudo = self.joueur_pseudo.trim().to_string();
+        let db_id = self.joueur_db_id;
         let est_hote = self.poker_online.est_hote;
         let nb_joueurs = self.poker_online.nb_joueurs;
         let jetons_depart = self.poker_online.jetons_depart;
+
+        if adresse.is_empty() {
+            self.poker_online.statut = "Adresse vide".to_string();
+            return;
+        }
+        if pseudo.is_empty() {
+            self.poker_online.statut = "Session invalide: pseudo vide".to_string();
+            return;
+        }
+        let Some(db_id) = db_id else {
+            self.poker_online.statut = "Session invalide: reconnecte-toi".to_string();
+            return;
+        };
 
         let (tx_srv_to_ui, rx_srv_to_ui) = mpsc::channel::<MessageServeur>();
         let (tx_ui_to_srv, rx_ui_to_srv) = mpsc::channel::<ActionJoueur>();
@@ -272,10 +284,9 @@ impl super::CasinoApp {
                     }
                 };
 
-                let auth_msg = if inscription {
-                    MessageClient::Inscription { pseudo, mot_de_passe }
-                } else {
-                    MessageClient::Login { pseudo, mot_de_passe }
+                let auth_msg = MessageClient::Session {
+                    db_id,
+                    pseudo,
                 };
 
                 if send_json(&mut stream, &auth_msg).await.is_err() {

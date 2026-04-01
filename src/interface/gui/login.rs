@@ -30,7 +30,12 @@ impl Default for LoginState {
 
 impl super::CasinoApp {
     pub(super) fn ui_login(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        if let Some(res) = self.login.rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
+        if let Some(res) = self
+            .login
+            .rx
+            .as_ref()
+            .and_then(|rx: &mpsc::Receiver<LoginResultat>| rx.try_recv().ok())
+        {
             self.login.en_cours = false;
             self.login.rx = None;
             match res {
@@ -38,6 +43,8 @@ impl super::CasinoApp {
                     self.joueur_pseudo = pseudo;
                     self.joueur_db_id = Some(db_id);
                     self.banque_joueur = jetons;
+                    self.banque_depart_session = jetons;
+                    self.wallet_sync_status = "Actif".to_string();
                     self.ecran = super::EcranCasino::Menu;
                 }
                 LoginResultat::Erreur(e) => {

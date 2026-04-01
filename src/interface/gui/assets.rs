@@ -2,19 +2,29 @@ use eframe::egui;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum GameAsset {
+    Wallpaper,
     Poker,
     Blackjack,
     Slot,
     HiLo,
+    Roulette,
+    Diamond,
+    Mines,
+    Crash,
 }
 
 impl GameAsset {
     pub(super) fn image(self) -> egui::ImageSource<'static> {
         match self {
+            GameAsset::Wallpaper => egui::include_image!("../../../assets/walpaper.png"),
             GameAsset::Poker => egui::include_image!("../../../assets/Poker-Texas.png"),
             GameAsset::Blackjack => egui::include_image!("../../../assets/Blackjack.png"),
             GameAsset::Slot => egui::include_image!("../../../assets/Slot.png"),
             GameAsset::HiLo => egui::include_image!("../../../assets/Hi-Lo.png"),
+            GameAsset::Roulette => egui::include_image!("../../../assets/Roulette.png"),
+            GameAsset::Diamond => egui::include_image!("../../../assets/diamond.png"),
+            GameAsset::Mines => egui::include_image!("../../../assets/Mines1.png"),
+            GameAsset::Crash => egui::include_image!("../../../assets/Crash1.png"),
         }
     }
 

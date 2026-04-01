@@ -19,7 +19,7 @@ pub(super) fn apply_casino_theme(ctx: &egui::Context) {
     style.spacing.button_padding = egui::vec2(14.0, 10.0);
     style.spacing.menu_margin = egui::Margin::same(12);
     style.visuals.window_corner_radius = egui::CornerRadius::same(16);
-    style.visuals.panel_fill = BG_DARK;
+    style.visuals.panel_fill = egui::Color32::TRANSPARENT;
     style.visuals.override_text_color = Some(TEXT_MAIN);
     style.visuals.widgets.noninteractive.bg_fill = BG_PANEL;
     style.visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, GOLD.gamma_multiply(0.35));
@@ -48,6 +48,25 @@ pub(super) fn apply_casino_theme(ctx: &egui::Context) {
     );
 
     ctx.set_style(style);
+}
+
+pub(super) fn paint_global_background(
+    ctx: &egui::Context,
+    wallpaper: &egui::TextureHandle,
+) {
+    let rect = ctx.content_rect();
+    let painter = ctx.layer_painter(egui::LayerId::background());
+    painter.image(
+        wallpaper.id(),
+        rect,
+        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+        egui::Color32::WHITE,
+    );
+    painter.rect_filled(
+        rect,
+        0.0,
+        egui::Color32::from_rgba_premultiplied(8, 12, 17, 95),
+    );
 }
 
 pub(super) fn panel_frame() -> egui::Frame {

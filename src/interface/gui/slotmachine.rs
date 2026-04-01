@@ -1,9 +1,42 @@
 use crate::games::slotmachine::SlotMachine;
 use eframe::egui;
+use rand::Rng;
 use super::theme::{back_button, panel_frame, premium_button, GOLD_SOFT, TEXT_DIM};
+
+pub(super) struct SlotMachineAnim {
+    pub start_time: std::time::Instant,
+    pub duration: std::time::Duration,
+    pub final_symbols: [usize; 3],
+    pub current_display: [usize; 3],
+    pub fixed_count: usize,
+}
 
 impl super::CasinoApp {
     pub(super) fn ui_slot_machine(&mut self, ui: &mut egui::Ui) {
+        if let Some(anim) = &mut self.slot_anim {
+            let elapsed = anim.start_time.elapsed();
+            if elapsed >= anim.duration {
+                self.slot_symbols = anim.final_symbols;
+                self.slot_anim = None;
+            } else {
+                let progress = elapsed.as_secs_f32() / anim.duration.as_secs_f32().max(0.001);
+                let fixed = (progress * 3.0).floor() as usize;
+                if fixed > anim.fixed_count {
+                    anim.fixed_count = fixed.min(3);
+                }
+                let mut rng = rand::thread_rng();
+                for i in anim.fixed_count..3 {
+                    anim.current_display[i] = rng.gen_range(0..4);
+                }
+                for i in 0..anim.fixed_count.min(3) {
+                    anim.current_display[i] = anim.final_symbols[i];
+                }
+                self.slot_symbols = anim.current_display;
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(60));
+            }
+        }
+
         panel_frame().show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading("Machine a sous");
@@ -15,10 +48,10 @@ impl super::CasinoApp {
                 ui.add_space(14.0);
                 if premium_button(ui, "Lancer !").clicked()
                 {
-                    self.banque_joueur -= self.slot_mise;
+                    self.debiter_banque_joueur_avec_source(self.slot_mise, "Machine a sous - Mise");
                     let result = SlotMachine::spin();
+                    self.slot_symbols = result.symbols;
                     
-                    // Initialiser l'animation
                     let mut rng = rand::thread_rng();
                     let duration = std::time::Duration::from_millis(rng.gen_range(1500..=2500));
                     self.slot_anim = Some(SlotMachineAnim {
@@ -32,7 +65,7 @@ impl super::CasinoApp {
                     // Stocker si c'est un gain
                     self.slot_result = if result.win {
                         let gain = self.slot_mise * 10;
-                        self.banque_joueur += gain;
+                        self.crediter_banque_joueur_avec_source(gain, "Machine a sous - Gain");
                         format!("Jackpot ! (+{} €)", gain)
                     } else {
                         "Perdu...".to_string()
