@@ -2,6 +2,7 @@ use crate::network::protocol::{ActionJoueur, MessageClient, MessageServeur};
 use crate::network::{recv_json, send_json};
 use eframe::egui;
 use super::draw::{dessiner_carte, dessiner_joueur_zone};
+use super::theme::{back_button, panel_frame, premium_button, section_title, status_panel, subpanel_frame, TABLE_GREEN, TEXT_DIM, GOLD_SOFT};
 use std::sync::mpsc;
 use std::thread;
 use tokio::net::TcpStream;
@@ -111,7 +112,7 @@ impl super::CasinoApp {
 
     pub(super) fn ui_poker_online(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("< Retour choix mode").clicked() {
+            if back_button(ui, "< Retour choix mode").clicked() {
                 self.poker_vue = super::PokerVue::Choix;
             }
             ui.separator();
@@ -119,41 +120,42 @@ impl super::CasinoApp {
         });
 
         if !self.poker_online.connecte {
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.label("Adresse:");
-                ui.text_edit_singleline(&mut self.poker_online.adresse);
-            });
-            ui.horizontal(|ui| {
-                ui.label("Pseudo:");
-                ui.text_edit_singleline(&mut self.poker_online.pseudo);
-            });
-            ui.horizontal(|ui| {
-                ui.label("Mot de passe:");
-                ui.add(egui::TextEdit::singleline(&mut self.poker_online.mot_de_passe).password(true));
-            });
-            ui.checkbox(&mut self.poker_online.inscription, "Créer un compte");
-            ui.checkbox(&mut self.poker_online.est_hote, "Je suis l'hote");
-            if self.poker_online.est_hote {
-                ui.add(
-                    egui::Slider::new(&mut self.poker_online.nb_joueurs, 2..=6)
-                        .text("Nombre de joueurs"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut self.poker_online.jetons_depart, 50..=10_000)
-                        .text("Jetons de depart"),
-                );
-            }
+            panel_frame().show(ui, |ui| {
+                section_title(ui, "Connexion online", "Rejoins une table distante ou ouvre une session hôte.");
+                ui.add_space(10.0);
+                subpanel_frame().show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Adresse:");
+                        ui.text_edit_singleline(&mut self.poker_online.adresse);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Pseudo:");
+                        ui.text_edit_singleline(&mut self.poker_online.pseudo);
+                    });
+                    ui.checkbox(&mut self.poker_online.est_hote, "Je suis l'hote");
+                    if self.poker_online.est_hote {
+                        ui.add(
+                            egui::Slider::new(&mut self.poker_online.nb_joueurs, 2..=6)
+                                .text("Nombre de joueurs"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.poker_online.jetons_depart, 50..=10_000)
+                                .text("Jetons de depart"),
+                        );
+                    }
+                });
 
-            if ui.button("Se connecter").clicked() {
-                self.demarrer_client_online();
-            }
-            ui.label(format!("Statut: {}", self.poker_online.statut));
+                if premium_button(ui, "Se connecter").clicked()
+                {
+                    self.demarrer_client_online();
+                }
+                ui.label(egui::RichText::new(format!("Statut: {}", self.poker_online.statut)).color(TEXT_DIM));
+            });
             return;
         }
 
         ui.horizontal(|ui| {
-            if ui.button("Se deconnecter").clicked() {
+            if back_button(ui, "Se deconnecter").clicked() {
                 self.arreter_client_online();
             }
             ui.label(format!("Statut: {}", self.poker_online.statut));
@@ -167,14 +169,20 @@ impl super::CasinoApp {
         dessiner_table_online(ui, rect, &self.poker_online);
 
         ui.add_space(8.0);
-        ui.monospace(format!(
-            "Pot: {} | Jetons: {}",
-            self.poker_online.pot, self.poker_online.jetons_restants
-        ));
+        status_panel(
+            ui,
+            format!(
+                "Pot: {} | Jetons: {}",
+                self.poker_online.pot, self.poker_online.jetons_restants
+            ),
+        );
 
         if self.poker_online.en_attente_action {
             ui.separator();
-            ui.label(format!("Ton tour. A payer: {}", self.poker_online.to_call));
+            ui.label(
+                egui::RichText::new(format!("Ton tour. A payer: {}", self.poker_online.to_call))
+                    .color(GOLD_SOFT),
+            );
             ui.horizontal(|ui| {
                 if ui
                     .button(if self.poker_online.to_call == 0 {
@@ -375,7 +383,7 @@ fn dessiner_table_online(ui: &mut egui::Ui, rect: egui::Rect, state: &OnlinePoke
     painter.rect_filled(rect, 18.0, bg);
 
     let table_rect = rect.shrink2(egui::vec2(24.0, 18.0));
-    painter.rect_filled(table_rect, 120.0, egui::Color32::from_rgb(18, 92, 64));
+    painter.rect_filled(table_rect, 120.0, TABLE_GREEN);
     painter.rect_stroke(
         table_rect,
         120.0,

@@ -1,5 +1,6 @@
 use super::{PokerVue, Street, TourJoueur};
 use super::draw::{dessiner_carte, dessiner_joueur_zone, dessiner_jetons};
+use super::theme::{back_button, panel_frame, premium_button, section_title, status_panel, subpanel_frame, GOLD_SOFT, TABLE_GREEN, TEXT_DIM};
 use crate::core::cards::{Carte, Paquet};
 use crate::core::player::Joueur;
 use crate::games::poker::engine::evaluer_holdem_pour_gui;
@@ -406,7 +407,7 @@ fn comparer_eval(a: (&u8, &[u8]), b: (&u8, &[u8])) -> Ordering {
 impl super::CasinoApp {
     pub(super) fn ui_poker(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("<- Retour menu").clicked() {
+            if back_button(ui, "<- Retour menu").clicked() {
                 self.ecran = super::EcranCasino::Menu;
                 self.poker_vue = PokerVue::Choix;
             }
@@ -422,20 +423,32 @@ impl super::CasinoApp {
     }
 
     pub(super) fn ui_poker_choix(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(10.0);
-        ui.heading("Choisis un mode");
-        ui.add_space(6.0);
-        if ui.button("Mode Solo (vs Bots)").clicked() {
-            self.poker_vue = PokerVue::Solo;
-        }
-        if ui.button("Mode Online (multijoueur)").clicked() {
-            self.poker_vue = PokerVue::Online;
-        }
+        panel_frame().show(ui, |ui| {
+            section_title(ui, "Choisis un mode", "Texas Hold'em local ou multijoueur.");
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                if ui
+                    .add(egui::Button::new("Mode Solo (vs Bots)").min_size(egui::vec2(240.0, 50.0)))
+                    .clicked()
+                {
+                    self.poker_vue = PokerVue::Solo;
+                }
+                if ui
+                    .add(
+                        egui::Button::new("Mode Online (multijoueur)")
+                            .min_size(egui::vec2(260.0, 50.0)),
+                    )
+                    .clicked()
+                {
+                    self.poker_vue = PokerVue::Online;
+                }
+            });
+        });
     }
 
     pub(super) fn ui_poker_solo(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("< Retour choix mode").clicked() {
+            if back_button(ui, "< Retour choix mode").clicked() {
                 self.poker_vue = PokerVue::Choix;
             }
             ui.separator();
@@ -443,48 +456,41 @@ impl super::CasinoApp {
         });
 
         if self.poker.is_none() {
-            ui.add_space(14.0);
-            ui.heading("Menu Poker Solo");
-            ui.label("Parametres de la table:");
-            ui.add_space(8.0);
+            panel_frame().show(ui, |ui| {
+                section_title(ui, "Table Poker Solo", "Prépare une table heads-up contre le bot.");
+                ui.add_space(10.0);
+                subpanel_frame().show(ui, |ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut self.jetons_depart)
+                            .range(50..=10_000)
+                            .prefix("Jetons depart: ")
+                            .speed(10.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut self.small_blind)
+                            .range(1..=1_000)
+                            .prefix("SB: "),
+                    );
+                    if self.big_blind <= self.small_blind {
+                        self.big_blind = self.small_blind + 1;
+                    }
+                    ui.add(
+                        egui::DragValue::new(&mut self.big_blind)
+                            .range((self.small_blind + 1)..=5_000)
+                            .prefix("BB: "),
+                    );
+                });
 
-            let max_buyin = self.banque_joueur.max(50);
-            if self.jetons_depart > max_buyin {
-                self.jetons_depart = max_buyin;
-            }
-            ui.add(
-                egui::DragValue::new(&mut self.jetons_depart)
-                    .range(50..=max_buyin)
-                    .prefix("Jetons depart: ")
-                    .speed(10.0),
-            );
-            ui.add(
-                egui::DragValue::new(&mut self.small_blind)
-                    .range(1..=1_000)
-                    .prefix("SB: "),
-            );
-            if self.big_blind <= self.small_blind {
-                self.big_blind = self.small_blind + 1;
-            }
-            ui.add(
-                egui::DragValue::new(&mut self.big_blind)
-                    .range((self.small_blind + 1)..=5_000)
-                    .prefix("BB: "),
-            );
-
-            ui.add_space(10.0);
-            if self.banque_joueur < 50 {
-                ui.colored_label(egui::Color32::RED, "Pas assez de jetons dans la banque !");
-            } else if ui.button("Lancer une partie").clicked() {
-                if self.banque_joueur >= self.jetons_depart {
-                    self.banque_joueur -= self.jetons_depart;
+                ui.add_space(10.0);
+                if premium_button(ui, "Lancer une partie").clicked()
+                {
                     self.poker = Some(PokerGuiGame::new(
                         self.jetons_depart,
                         self.small_blind,
                         self.big_blind,
                     ));
                 }
-            }
+            });
             return;
         }
 
@@ -492,7 +498,12 @@ impl super::CasinoApp {
 
         let mut fermer_table = false;
         ui.separator();
-        ui.label(format!("Street: {}", game.street.nom()));
+        ui.label(
+            egui::RichText::new(format!("Street: {}", game.street.nom()))
+                .size(20.0)
+                .strong()
+                .color(GOLD_SOFT),
+        );
 
         ui.add_space(8.0);
         let table_height = 430.0;
@@ -502,11 +513,17 @@ impl super::CasinoApp {
         dessiner_table_solo(ui, rect, game);
 
         ui.add_space(10.0);
-        ui.monospace(format!(
-            "Pot: {} | Toi: {} jetons | Bot: {} jetons | Mise actuelle: {}",
-            game.pot, game.hero.jetons, game.bot.jetons, game.mise_actuelle
-        ));
-        ui.monospace(&game.message);
+        status_panel(
+            ui,
+            format!(
+                "Pot: {} | Toi: {} jetons | Bot: {} jetons | Mise actuelle: {}",
+                game.pot, game.hero.jetons, game.bot.jetons, game.mise_actuelle
+            ),
+        );
+        ui.add_space(6.0);
+        subpanel_frame().show(ui, |ui| {
+            ui.label(egui::RichText::new(&game.message).color(GOLD_SOFT));
+        });
 
         ui.add_space(10.0);
         if game.street == Street::Terminee {
@@ -538,44 +555,49 @@ impl super::CasinoApp {
         }
 
         if game.tour != TourJoueur::Hero || !game.besoins_action_hero || game.hero.couche {
-            ui.label("Attends l'action du bot...");
+            ui.label(egui::RichText::new("Attends l'action du bot...").color(TEXT_DIM));
             return;
         }
 
         let to_call = game.to_call(TourJoueur::Hero);
-        ui.label(format!(
-            "Ton tour. Mise tour: {} | A payer: {}",
-            game.hero.mise_tour, to_call
-        ));
+        subpanel_frame().show(ui, |ui| {
+            ui.label(
+                egui::RichText::new(format!(
+                    "Ton tour. Mise tour: {} | A payer: {}",
+                    game.hero.mise_tour, to_call
+                ))
+                .color(GOLD_SOFT),
+            );
 
-        ui.horizontal(|ui| {
-            if ui.button("Fold").clicked() {
-                game.action_fold(TourJoueur::Hero);
-            }
+            ui.horizontal(|ui| {
+                if ui.button("Fold").clicked() {
+                    game.action_fold(TourJoueur::Hero);
+                }
 
-            let lib_call = if to_call == 0 { "Check" } else { "Call" };
-            if ui.button(lib_call).clicked() {
-                game.action_check_ou_call(TourJoueur::Hero);
+                let lib_call = if to_call == 0 { "Check" } else { "Call" };
+                if ui.button(lib_call).clicked() {
+                    game.action_check_ou_call(TourJoueur::Hero);
+                }
+            });
+
+            if game.peut_relancer(TourJoueur::Hero) {
+                let min_raise = game.total_min_raise();
+                let max_raise = game.total_max(TourJoueur::Hero);
+                if game.raise_total_input < min_raise || game.raise_total_input > max_raise {
+                    game.raise_total_input = min_raise;
+                }
+
+                ui.add_space(6.0);
+                ui.label(format!("Relance totale ({}..={}):", min_raise, max_raise));
+                ui.add(egui::Slider::new(
+                    &mut game.raise_total_input,
+                    min_raise..=max_raise,
+                ));
+                if ui.button("Raise").clicked() {
+                    game.action_raise(TourJoueur::Hero, game.raise_total_input);
+                }
             }
         });
-
-        if game.peut_relancer(TourJoueur::Hero) {
-            let min_raise = game.total_min_raise();
-            let max_raise = game.total_max(TourJoueur::Hero);
-            if game.raise_total_input < min_raise || game.raise_total_input > max_raise {
-                game.raise_total_input = min_raise;
-            }
-
-            ui.add_space(6.0);
-            ui.label(format!("Relance totale ({}..={}):", min_raise, max_raise));
-            ui.add(egui::Slider::new(
-                &mut game.raise_total_input,
-                min_raise..=max_raise,
-            ));
-            if ui.button("Raise").clicked() {
-                game.action_raise(TourJoueur::Hero, game.raise_total_input);
-            }
-        }
     }
 }
 
@@ -585,7 +607,7 @@ fn dessiner_table_solo(ui: &mut egui::Ui, rect: egui::Rect, game: &PokerGuiGame)
     painter.rect_filled(rect, 18.0, bg);
 
     let table_rect = rect.shrink2(egui::vec2(24.0, 18.0));
-    painter.rect_filled(table_rect, 120.0, egui::Color32::from_rgb(18, 92, 64));
+    painter.rect_filled(table_rect, 120.0, TABLE_GREEN);
     painter.rect_stroke(
         table_rect,
         120.0,

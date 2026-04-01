@@ -1,11 +1,12 @@
 use crate::games::blackjack::engine::{EtatBlackjack, JeuBlackjack};
 use eframe::egui;
 use super::draw::{dessiner_carte, dessiner_jetons, dessiner_zone_label};
+use super::theme::{back_button, panel_frame, premium_button, section_title, status_panel, subpanel_frame, TABLE_GREEN, TEXT_DIM};
 
 impl super::CasinoApp {
     pub(super) fn ui_blackjack(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("<- Retour menu").clicked() {
+            if back_button(ui, "<- Retour menu").clicked() {
                 self.ecran = super::EcranCasino::Menu;
             }
             ui.separator();
@@ -13,52 +14,30 @@ impl super::CasinoApp {
         });
 
         if self.blackjack.is_none() {
-            ui.add_space(12.0);
-            ui.heading("Menu Blackjack");
-            ui.label("Parametres de la table:");
-            ui.add_space(8.0);
-            ui.add(
-                egui::DragValue::new(&mut self.bj_nb_joueurs)
-                    .range(2..=6)
-                    .prefix("Joueurs: "),
-            );
-            let max_buyin = self.banque_joueur.max(50);
-            if self.bj_jetons_depart > max_buyin {
-                self.bj_jetons_depart = max_buyin;
-            }
-            ui.add(
-                egui::DragValue::new(&mut self.bj_jetons_depart)
-                    .range(50..=max_buyin)
-                    .prefix("Jetons: "),
-            );
-            ui.add_space(10.0);
-            if self.banque_joueur < 50 {
-                ui.colored_label(egui::Color32::RED, "Pas assez de jetons dans la banque !");
-            } else if ui.button("Creer table Blackjack").clicked() {
-                if self.banque_joueur >= self.bj_jetons_depart {
-                    self.banque_joueur -= self.bj_jetons_depart;
+            panel_frame().show(ui, |ui| {
+                section_title(ui, "Table Blackjack", "Configure une table multi-joueurs avec bots.");
+                ui.add_space(10.0);
+                subpanel_frame().show(ui, |ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut self.bj_nb_joueurs)
+                            .range(2..=6)
+                            .prefix("Joueurs: "),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut self.bj_jetons_depart)
+                            .range(50..=10_000)
+                            .prefix("Jetons: "),
+                    );
+                });
+                ui.add_space(10.0);
+                if premium_button(ui, "Creer table Blackjack").clicked()
+                {
                     self.blackjack = Some(JeuBlackjack::nouveau(
                         self.bj_nb_joueurs as usize,
                         self.bj_jetons_depart,
                     ));
                 }
-            }
-            return;
-        }
-
-        let mut quitter = false;
-        if let Some(jeu) = &self.blackjack {
-            ui.horizontal(|ui| {
-                if ui.button("Quitter la table").clicked() {
-                    quitter = true;
-                }
             });
-        }
-        if quitter {
-            if let Some(jeu) = &self.blackjack {
-                self.banque_joueur += jeu.jetons_humain();
-            }
-            self.blackjack = None;
             return;
         }
 
@@ -66,12 +45,18 @@ impl super::CasinoApp {
             return;
         };
         ui.separator();
-        ui.label(format!(
-            "Jetons (toi): {} | Mise de reference: {}",
-            jeu.jetons_humain(),
-            jeu.mise_reference
-        ));
-        ui.label(&jeu.message);
+        status_panel(
+            ui,
+            format!(
+                "Jetons (toi): {} | Mise de reference: {}",
+                jeu.jetons_humain(),
+                jeu.mise_reference
+            ),
+        );
+        ui.add_space(6.0);
+        subpanel_frame().show(ui, |ui| {
+            ui.label(&jeu.message);
+        });
         ui.add_space(8.0);
 
         let table_height = 500.0;
@@ -80,33 +65,43 @@ impl super::CasinoApp {
             ui.allocate_exact_size(egui::vec2(table_width, table_height), egui::Sense::hover());
         dessiner_table_blackjack(ui, rect, jeu);
 
-        ui.add_space(8.0);
-        ui.separator();
-        ui.add_space(6.0);
-        ui.group(|ui| {
-            if jeu.etat == EtatBlackjack::EnAttenteMise || jeu.etat == EtatBlackjack::Termine {
-                let max_mise = jeu.jetons_humain().max(1);
-                if self.bj_mise_input == 0 || self.bj_mise_input > max_mise {
-                    self.bj_mise_input = 1.min(max_mise);
-                }
-                ui.label("Nouvelle manche:");
-                ui.add(egui::Slider::new(&mut self.bj_mise_input, 1..=max_mise).text("Mise"));
-                if ui.button("Distribuer").clicked() {
-                    let _ = jeu.commencer_manche(self.bj_mise_input);
-                }
-            } else if jeu.etat == EtatBlackjack::TourJoueur && jeu.est_tour_humain() {
-                ui.label("Ton tour");
-                ui.horizontal(|ui| {
-                    if ui.button("Hit").clicked() {
-                        jeu.joueur_hit();
+        ui.add_space(16.0);
+        panel_frame().show(ui, |ui| {
+            section_title(ui, "Actions", "Commandes de manche.");
+            ui.add_space(10.0);
+            subpanel_frame().show(ui, |ui| {
+                ui.set_min_height(88.0);
+                if jeu.etat == EtatBlackjack::EnAttenteMise || jeu.etat == EtatBlackjack::Termine {
+                    let max_mise = jeu.jetons_humain().max(1);
+                    if self.bj_mise_input == 0 || self.bj_mise_input > max_mise {
+                        self.bj_mise_input = 1.min(max_mise);
                     }
-                    if ui.button("Stand").clicked() {
-                        jeu.joueur_stand();
+                    ui.label("Nouvelle manche");
+                    ui.add_space(6.0);
+                    ui.add(
+                        egui::Slider::new(&mut self.bj_mise_input, 1..=max_mise).text("Mise"),
+                    );
+                    ui.add_space(10.0);
+                    if premium_button(ui, "Distribuer").clicked() {
+                        let _ = jeu.commencer_manche(self.bj_mise_input);
                     }
-                });
-            } else {
-                ui.label("Tour des bots / croupier...");
-            }
+                } else if jeu.etat == EtatBlackjack::TourJoueur && jeu.est_tour_humain() {
+                    ui.label("Ton tour");
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if premium_button(ui, "Hit").clicked() {
+                            jeu.joueur_hit();
+                        }
+                        if premium_button(ui, "Stand").clicked() {
+                            jeu.joueur_stand();
+                        }
+                    });
+                } else {
+                    ui.label("Tour en cours");
+                    ui.add_space(8.0);
+                    ui.colored_label(TEXT_DIM, "Les bots et le croupier jouent.");
+                }
+            });
         });
     }
 }
@@ -115,7 +110,7 @@ fn dessiner_table_blackjack(ui: &mut egui::Ui, rect: egui::Rect, jeu: &JeuBlackj
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 18.0, egui::Color32::from_rgb(12, 28, 24));
     let table = rect.shrink2(egui::vec2(18.0, 12.0));
-    painter.rect_filled(table, 120.0, egui::Color32::from_rgb(18, 96, 66));
+    painter.rect_filled(table, 120.0, TABLE_GREEN);
     painter.rect_stroke(
         table,
         120.0,
@@ -153,7 +148,7 @@ fn dessiner_table_blackjack(ui: &mut egui::Ui, rect: egui::Rect, jeu: &JeuBlackj
         .filter_map(|(i, j)| if j.actif() { Some(i) } else { None })
         .collect();
     let nb = actifs.len().max(1) as f32;
-    let zone_y = table.bottom() - 28.0;
+    let zone_y = table.bottom() - 74.0;
     let x_start = table.left() + 120.0;
     let x_end = table.right() - 120.0;
     let step = if nb > 1.0 {
@@ -169,13 +164,13 @@ fn dessiner_table_blackjack(ui: &mut egui::Ui, rect: egui::Rect, jeu: &JeuBlackj
         let zone =
             egui::Rect::from_center_size(egui::pos2(x_center, zone_y), egui::vec2(zone_w, 44.0));
         let titre = if *idx == 0 {
-            format!("Toi | {}", jeu.score_joueur(*idx))
+            format!("Toi | Score: {}", jeu.score_joueur(*idx))
         } else {
-            format!("{} | {}", j.nom, jeu.score_joueur(*idx))
+            format!("{} | Score: {}", j.nom, jeu.score_joueur(*idx))
         };
         dessiner_zone_label(&painter, zone, &titre);
 
-        let cards_y = zone.top() - 118.0;
+        let cards_y = zone.bottom() + 12.0;
         for (k, card) in j.main.iter().enumerate() {
             let card_rect = egui::Rect::from_min_size(
                 egui::pos2(x_center - 58.0 + k as f32 * 38.0, cards_y),

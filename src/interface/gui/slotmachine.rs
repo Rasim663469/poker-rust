@@ -1,43 +1,19 @@
 use crate::games::slotmachine::SlotMachine;
 use eframe::egui;
-use rand::Rng;
-
-pub struct SlotMachineAnim {
-    pub start_time: std::time::Instant,
-    pub duration: std::time::Duration,
-    pub final_symbols: [usize; 3],
-    pub current_display: [usize; 3],
-    pub fixed_count: usize, // Nombre de symboles qui sont fixés
-}
+use super::theme::{back_button, panel_frame, premium_button, GOLD_SOFT, TEXT_DIM};
 
 impl super::CasinoApp {
     pub(super) fn ui_slot_machine(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(40.0);
-        ui.vertical_centered(|ui| {
-            ui.heading("Machine a sous");
-            ui.add_space(20.0);
-            let highlight =
-                self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
-            dessiner_slot_machine(ui, &self.slot_symbols, highlight);
-            ui.add_space(10.0);
-            
-            ui.horizontal(|ui| {
-                ui.label("Ta mise :");
-                let max_mise = self.banque_joueur.max(1);
-                if self.slot_anim.is_none() && self.slot_mise > max_mise {
-                    self.slot_mise = max_mise;
-                }
-                ui.add(egui::Slider::new(&mut self.slot_mise, 1..=max_mise).text("€"));
-            });
-            ui.label(format!("Jackpot potentiel : {} €", self.slot_mise * 10));
-            
-            ui.horizontal(|ui| {
-                ui.add_space(750.0);
-                if self.banque_joueur < self.slot_mise {
-                    ui.colored_label(egui::Color32::RED, "Pas assez d'euros !");
-                } else if ui
-                    .add_enabled(self.slot_anim.is_none(), egui::Button::new("Lancer !").min_size(egui::vec2(100.0, 40.0)))
-                    .clicked()
+        panel_frame().show(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.heading("Machine a sous");
+                ui.label(egui::RichText::new("Rouleaux premium, style arcade-casino.").color(TEXT_DIM));
+                ui.add_space(20.0);
+                let highlight =
+                    self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
+                dessiner_slot_machine(ui, &self.slot_symbols, highlight);
+                ui.add_space(14.0);
+                if premium_button(ui, "Lancer !").clicked()
                 {
                     self.banque_joueur -= self.slot_mise;
                     let result = SlotMachine::spin();
@@ -62,62 +38,16 @@ impl super::CasinoApp {
                         "Perdu...".to_string()
                     };
                 }
+                ui.add_space(10.0);
+                if highlight {
+                    ui.colored_label(GOLD_SOFT, &self.slot_result);
+                } else {
+                    ui.label(&self.slot_result);
+                }
+                if back_button(ui, "<- Retour menu").clicked() {
+                    self.ecran = super::EcranCasino::Menu;
+                }
             });
-            ui.add_space(10.0);
-
-            // Gérer l'animation
-            if let Some(anim) = &mut self.slot_anim {
-                let elapsed = anim.start_time.elapsed().as_secs_f32();
-                let total = anim.duration.as_secs_f32();
-                let progress = (elapsed / total).min(1.0);
-
-                // Calculer le nombre de symboles fixes
-                let fixed_count = if progress < 0.33 {
-                    0
-                } else if progress < 0.66 {
-                    1
-                } else if progress < 1.0 {
-                    2
-                } else {
-                    3
-                };
-                anim.fixed_count = fixed_count;
-
-                // Mettre à jour les symboles affichés
-                let mut rng = rand::thread_rng();
-                for i in 0..3 {
-                    if i < fixed_count {
-                        // Ce symbole est fixé, utiliser le symbole final
-                        anim.current_display[i] = anim.final_symbols[i];
-                    } else {
-                        // Ce symbole roule encore, afficher une valeur aléatoire
-                        anim.current_display[i] = rng.gen_range(0..4);
-                    }
-                }
-
-                // Mettre à jour slot_symbols pour l'affichage
-                self.slot_symbols = anim.current_display;
-
-                // Si l'animation est terminée
-                if progress >= 1.0 {
-                    self.slot_symbols = anim.final_symbols;
-                    self.slot_anim = None;
-                } else {
-                    // Animation en cours, redemander repaint
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
-                }
-            }
-
-            let highlight =
-                self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
-            if highlight {
-                ui.colored_label(egui::Color32::from_rgb(255, 215, 0), &self.slot_result);
-            } else {
-                ui.label(&self.slot_result);
-            }
-            if ui.button("<- Retour menu").clicked() {
-                self.ecran = super::EcranCasino::Menu;
-            }
         });
     }
 }
@@ -126,11 +56,11 @@ fn dessiner_slot_machine(ui: &mut egui::Ui, symbols: &[usize; 3], highlight: boo
     static SYMBOLS: [&str; 4] = ["🍒", "🍋", "🔔", "7"];
     let (rect, _response) = ui.allocate_exact_size(egui::vec2(400.0, 140.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 16.0, egui::Color32::from_rgb(40, 40, 40));
+    painter.rect_filled(rect, 22.0, egui::Color32::from_rgb(49, 18, 23));
     painter.rect_stroke(
         rect,
-        16.0,
-        egui::Stroke::new(3.0, egui::Color32::from_rgb(200, 180, 60)),
+        22.0,
+        egui::Stroke::new(3.0, egui::Color32::from_rgb(219, 176, 76)),
         egui::StrokeKind::Outside,
     );
 
@@ -139,9 +69,9 @@ fn dessiner_slot_machine(ui: &mut egui::Ui, symbols: &[usize; 3], highlight: boo
         let y = rect.top() + 30.0;
         let slot_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(60.0, 80.0));
         let color = if highlight {
-            egui::Color32::from_rgb(255, 220, 80)
+            egui::Color32::from_rgb(255, 230, 122)
         } else {
-            egui::Color32::from_rgb(230, 230, 230)
+            egui::Color32::from_rgb(241, 236, 222)
         };
         painter.rect_filled(slot_rect, 12.0, color);
         painter.rect_stroke(
