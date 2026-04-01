@@ -91,6 +91,8 @@ struct WalletMovement {
 }
 
 pub struct CasinoApp {
+    // Ce struct concentre l'état vivant de l'application :
+    // écran courant, session joueur, portefeuille et états de chaque jeu.
     ecran: EcranCasino,
     joueur_pseudo: String,
     joueur_db_id: Option<i32>,
@@ -209,6 +211,8 @@ impl Default for CasinoApp {
 
 impl eframe::App for CasinoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // update est la boucle principale d'egui :
+        // on remet le thème, on fait avancer les états dynamiques, puis on redessine l'interface.
         apply_casino_theme(ctx);
         if self.wallpaper_texture.is_none() {
             if let Ok(image) =
@@ -226,6 +230,12 @@ impl eframe::App for CasinoApp {
         }
         self.pomper_messages_online();
 
+        // Si la session a sauté, on force le retour à la page de connexion.
+        // Ça évite de laisser l'utilisateur dans un écran qui suppose un compte actif.
+        if !self.est_connecte() && self.ecran != EcranCasino::Login {
+            self.ecran = EcranCasino::Login;
+        }
+
         if let Some(p) = &mut self.poker {
             p.bot_jouer_si_tour();
         }
@@ -242,7 +252,7 @@ impl eframe::App for CasinoApp {
             .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new("CASINO RUST")
+                    egui::RichText::new("CASINO ROYALE")
                         .size(28.0)
                         .strong()
                         .color(GOLD_SOFT),
@@ -265,13 +275,13 @@ impl eframe::App for CasinoApp {
                 );
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.ecran != EcranCasino::Login
-                        && self.joueur_db_id.is_some()
-                        && premium_button(ui, "Depot").clicked()
-                    {
+                    if self.est_connecte() && premium_button(ui, "Deconnexion").clicked() {
+                        self.deconnecter_utilisateur();
+                    }
+                    if self.est_connecte() && premium_button(ui, "Depot").clicked() {
                         self.ecran = EcranCasino::Depot;
                     }
-                    if self.ecran != EcranCasino::Login {
+                    if self.est_connecte() {
                         ui.label(
                             egui::RichText::new(format!(
                                 "Capital global: {} jetons",
@@ -280,7 +290,7 @@ impl eframe::App for CasinoApp {
                             .color(GOLD_SOFT),
                         );
                     }
-                    if self.ecran != EcranCasino::Login && !self.joueur_pseudo.is_empty() {
+                    if self.est_connecte() && !self.joueur_pseudo.is_empty() {
                         ui.label(
                             egui::RichText::new(format!("Joueur: {}", self.joueur_pseudo))
                                 .color(TEXT_DIM),
@@ -318,13 +328,57 @@ impl eframe::App for CasinoApp {
 }
 
 impl CasinoApp {
+    fn est_connecte(&self) -> bool {
+        self.joueur_db_id.is_some() && !self.joueur_pseudo.trim().is_empty()
+    }
+
+    fn deconnecter_utilisateur(&mut self) {
+        // Ici on fait un vrai logout applicatif :
+        // on coupe l'online si besoin, on vide la session, puis on remet les écrans dans un état neutre.
+        if self.poker_online.connecte {
+            self.quitter_session_online();
+        } else {
+            self.arreter_client_online();
+        }
+
+        self.ecran = EcranCasino::Login;
+        self.joueur_pseudo.clear();
+        self.joueur_db_id = None;
+        self.banque_joueur = 0;
+        self.banque_depart_session = 0;
+        self.wallet_history.clear();
+        self.wallet_sync_status = "Hors ligne".to_string();
+
+        self.poker_vue = PokerVue::Choix;
+        self.poker = None;
+        self.poker_wallet_snapshot = None;
+        self.blackjack = None;
+        self.blackjack_wallet_snapshot = None;
+        self.hilo = None;
+        self.hilo_wallet_snapshot = None;
+        self.hilo_last_outcome = None;
+        self.hilo_reveal_at = None;
+        self.mines = None;
+        self.crash = JeuCrash::default();
+        self.roulette_anim = None;
+        self.roulette_last_result = None;
+        self.roulette_bet = RouletteBetUI::None;
+        self.roulette_mise_en_jeu = 0;
+        self.tx_online = None;
+        self.rx_online = None;
+        self.poker_online = OnlinePokerState::default();
+        self.login = LoginState::default();
+    }
+
     fn ui_menu(&mut self, ui: &mut egui::Ui) {
+        // Le menu sert surtout de hub : on n'y met pas de logique métier,
+        // il redirige juste vers le bon écran selon le jeu choisi.
         if lobby_hero(
             ui,
-            "CASINO RUST",
-            "Entrez dans un lobby pense comme un vrai casino en ligne.",
-            "Tables elegantes, ambiance nocturne, jeux classiques et sessions rapides reunis dans une interface unique, sombre et premium.",
-            "Decouvrir les tables",
+            "CASINO ROYALE",
+            "Tout les gagnants ont déjà joué une fois",
+            "",
+            "",
         )
         .clicked()
         {
@@ -515,6 +569,8 @@ impl CasinoApp {
     }
 
     fn capital_depart_jeu(&self, fallback: u32) -> u32 {
+        // Quand un joueur est connecté, les jeux solo reprennent son capital global.
+        // Sinon on garde une valeur locale par défaut pour pouvoir tester sans compte.
         if self.joueur_db_id.is_some() {
             self.banque_joueur
         } else {
@@ -576,6 +632,8 @@ impl CasinoApp {
         montant_courant: u32,
         source: &str,
     ) {
+        // On mémorise le dernier solde connu du jeu pour transformer
+        // une simple variation de bankroll en mouvement lisible dans l'historique.
         let precedent = snapshot.unwrap_or(montant_courant);
         if precedent != montant_courant {
             self.enregistrer_mouvement_wallet(source, montant_courant as i32 - precedent as i32);
@@ -596,6 +654,8 @@ impl CasinoApp {
 }
 
 fn demarrer_wallet_sync_worker() -> mpsc::Sender<WalletSyncRequest> {
+    // La synchro DB tourne dans un thread séparé pour ne jamais bloquer l'UI
+    // quand on crédite ou débite le portefeuille.
     let (tx, rx) = mpsc::channel::<WalletSyncRequest>();
 
     thread::spawn(move || {
@@ -622,6 +682,8 @@ fn demarrer_wallet_sync_worker() -> mpsc::Sender<WalletSyncRequest> {
             while let Ok(request) = rx.recv() {
                 match request {
                     WalletSyncRequest::Save { db_id, jetons } => {
+                        // Si plusieurs mises à jour arrivent très vite, on garde la dernière.
+                        // Pour le portefeuille, c'est le solde final qui compte vraiment.
                         let mut last_db_id = db_id;
                         let mut last_jetons = jetons;
 

@@ -46,7 +46,7 @@ impl super::CasinoApp {
                     egui::vec2(ui.available_width(), 140.0),
                     egui::Sense::hover(),
                 );
-                paint_contained_art(ui, art_rect.shrink(4.0), GameAsset::Crash, 18);
+                paint_contained_art(ui, art_rect.shrink(4.0), GameAsset::Plane, 18);
             });
             ui.add_space(12.0);
 

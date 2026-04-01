@@ -51,6 +51,8 @@ pub(super) fn dessiner_joueur_zone(
 }
 
 fn draw_card_image(ui: &mut egui::Ui, painter: &egui::Painter, rect: egui::Rect, card: &Carte) {
+    // Si l'API fournit déjà une vraie image de carte, on l'affiche seule.
+    // Ça évite le double rendu image + texte qui rendait les cartes illisibles.
     painter.rect_filled(rect, 10.0, egui::Color32::from_rgb(249, 247, 240));
     painter.rect_stroke(
         rect,
@@ -67,6 +69,8 @@ fn draw_card_image(ui: &mut egui::Ui, painter: &egui::Painter, rect: egui::Rect,
 }
 
 fn draw_card_fallback(painter: &egui::Painter, rect: egui::Rect, card: Option<&Carte>, face_up: bool) {
+    // Ce fallback sert quand on n'a pas d'image complète disponible.
+    // On garde ainsi un rendu propre même sans asset externe.
     if face_up {
         painter.rect_filled(rect, 10.0, egui::Color32::from_rgb(249, 247, 240));
         painter.rect_stroke(
@@ -127,6 +131,8 @@ pub(super) fn dessiner_carte(
     card: Option<&Carte>,
     face_up: bool,
 ) {
+    // Ici on choisit explicitement un seul mode de rendu :
+    // image complète OU fallback dessiné, jamais les deux.
     if face_up {
         if let Some(card) = card {
             draw_card_image(ui, painter, rect, card);

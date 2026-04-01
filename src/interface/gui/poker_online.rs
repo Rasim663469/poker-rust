@@ -28,7 +28,7 @@ pub(super) struct OnlinePokerState {
 impl Default for OnlinePokerState {
     fn default() -> Self {
         Self {
-            adresse: "127.0.0.1:9090".to_string(),
+            adresse: "162.38.111.42:9090".to_string(),
             est_hote: false,
             nb_joueurs: 2,
             jetons_depart: 1000,
@@ -155,8 +155,8 @@ impl super::CasinoApp {
         }
 
         ui.horizontal(|ui| {
-            if back_button(ui, "Se deconnecter").clicked() {
-                self.arreter_client_online();
+            if premium_button(ui, "Quitter la session").clicked() {
+                self.quitter_session_online();
             }
             ui.label(format!("Statut: {}", self.poker_online.statut));
         });
@@ -374,6 +374,16 @@ impl super::CasinoApp {
         self.poker_online.connecte = false;
         self.poker_online.en_attente_action = false;
         self.poker_online.statut = "Deconnecte".to_string();
+    }
+
+    pub(super) fn quitter_session_online(&mut self) {
+        if self.poker_online.en_attente_action {
+            self.envoyer_action_online(ActionJoueur::Fold);
+        }
+        self.poker_online
+            .logs
+            .push("[INFO] Session quittee. La main en cours est abandonnee.".to_string());
+        self.arreter_client_online();
     }
 
     pub(super) fn envoyer_action_online(&mut self, action: ActionJoueur) {

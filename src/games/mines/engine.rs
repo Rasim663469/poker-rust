@@ -24,6 +24,8 @@ pub enum CaseMine {
 // ─── Jeu ────────────────────────────────────────────────────────────
 
 pub struct JeuMines {
+    // On garde ici l'état complet d'une grille de Mines :
+    // état visuel, mise, multiplicateur, équité et options d'autoplay.
     pub grille: [[CaseMine; 5]; 5],
     pub nb_mines: u8,
     pub mise: f64,
@@ -53,6 +55,8 @@ impl JeuMines {
         graine_serveur: String,
         nonce: u64,
     ) -> Result<Self, String> {
+        // Une partie de Mines démarre avec ses graines dès le début.
+        // Comme ça, la grille est déterminée une fois pour toutes et peut être vérifiée après coup.
         if nb_mines < 1 || nb_mines > 24 {
             return Err("Le nombre de mines doit être entre 1 et 24.".into());
         }
@@ -84,6 +88,8 @@ impl JeuMines {
 
     /// Révèle une case (ligne, col) — renvoie le nouveau multiplicateur ou erreur.
     pub fn reveler(&mut self, ligne: usize, col: usize) -> Result<f64, String> {
+        // Révéler une case est l'action centrale du jeu :
+        // soit on continue avec un multiplicateur plus haut, soit on tombe sur une mine et la manche s'arrête.
         if self.etat != EtatMines::Actif {
             return Err("La partie n'est pas active.".into());
         }
@@ -97,7 +103,7 @@ impl JeuMines {
         if self.est_mine(ligne, col) {
             self.grille[ligne][col] = CaseMine::MineRevelee;
             self.etat = EtatMines::Perdu;
-            self.message = format!("💥 Mine ! Vous perdez {:.2}.", self.mise);
+            self.message = format!("Mine ! Vous perdez {:.2}.", self.mise);
             self.reveler_tout();
             return Ok(0.0);
         }
@@ -105,11 +111,12 @@ impl JeuMines {
         self.grille[ligne][col] = CaseMine::Revelee;
         self.cases_revelees += 1;
 
-        // Calcul du multiplicateur suivant
+        // Le multiplicateur augmente à chaque gemme trouvée
+        // pour refléter le risque de plus en plus élevé.
         self.multiplicateur = self.calculer_multiplicateur();
         let paiement = self.mise * self.multiplicateur;
         self.message = format!(
-            "💎 Gemme ! Multiplicateur: {:.4}x — Paiement potentiel: {:.2}",
+            "Gemme ! Multiplicateur: {:.4}x — Paiement potentiel: {:.2}",
             self.multiplicateur, paiement
         );
 
@@ -119,7 +126,7 @@ impl JeuMines {
             let paiement_final = self.mise * self.multiplicateur;
             self.etat = EtatMines::Gagne(paiement_final);
             self.message = format!(
-                "🎉 Toutes les gemmes ! Paiement max: {:.2} ({:.4}x)",
+                "Toutes les gemmes ! Paiement max: {:.2} ({:.4}x)",
                 paiement_final, self.multiplicateur
             );
             self.reveler_tout();
@@ -130,6 +137,8 @@ impl JeuMines {
 
     /// Le joueur encaisse son gain actuel.
     pub fn encaisser(&mut self) -> Result<f64, String> {
+        // Encaisser fige le gain actuel.
+        // Le joueur choisit donc entre sécuriser son paiement ou continuer à prendre du risque.
         if self.etat != EtatMines::Actif {
             return Err("La partie n'est pas active.".into());
         }
@@ -140,7 +149,7 @@ impl JeuMines {
         let paiement = self.mise * self.multiplicateur;
         self.etat = EtatMines::Gagne(paiement);
         self.message = format!(
-            "💰 Encaissé ! Paiement: {:.2} ({:.4}x)",
+            "Encaissé ! Paiement: {:.2} ({:.4}x)",
             paiement, self.multiplicateur
         );
         self.reveler_tout();
@@ -149,6 +158,8 @@ impl JeuMines {
 
     /// Autoplay : révèle automatiquement `n` cases, s'arrête sur mine.
     pub fn autoplay(&mut self, n: u8) {
+        // L'autoplay rejoue juste plusieurs révélations à la chaîne.
+        // Il ne contourne pas les règles : il s'arrête dès qu'une mine sort.
         if self.etat != EtatMines::Actif {
             return;
         }
@@ -170,6 +181,8 @@ impl JeuMines {
     /// Formule : produit de (25 - i - mines) / (25 - i) pour i de 0 à cases_revelees - 1
     /// avec house_edge = 0.99 (1% avantage maison)
     fn calculer_multiplicateur(&self) -> f64 {
+        // Ici on modélise le risque réel :
+        // plus il reste peu de cases sûres, plus chaque nouvelle révélation "vaut" cher.
         let n = 25u32;
         let m = self.nb_mines as u32;
         let mut mult = 1.0_f64;
@@ -187,6 +200,8 @@ impl JeuMines {
 
     /// Vérifie si (ligne, col) est une mine.
     fn est_mine(&self, ligne: usize, col: usize) -> bool {
+        // positions_mines contient les coordonnées exactes des mines.
+        // On sépare ça de la grille visuelle pour garder une logique claire.
         self.positions_mines.contains(&(ligne, col))
     }
 
@@ -231,7 +246,8 @@ fn generer_positions_mines(
     nonce: u64,
     nb_mines: u8,
 ) -> Vec<(usize, usize)> {
-    // HMAC-SHA256(key = server_seed, data = client_seed:nonce:round)
+    // L'idée du "provably fair" est simple :
+    // avec les mêmes graines et le même nonce, on doit retomber exactement sur les mêmes mines.
     let mut indices: Vec<usize> = (0..25).collect();
 
     for i in 0..nb_mines as usize {
@@ -241,7 +257,7 @@ fn generer_positions_mines(
         mac.update(data.as_bytes());
         let result = mac.finalize().into_bytes();
 
-        // Prendre les 4 premiers octets comme u32
+        // On transforme une partie du hash en entier pour piloter un mélange déterministe.
         let val = u32::from_be_bytes([result[0], result[1], result[2], result[3]]);
         let remaining = indices.len() - i;
         let j = i + (val as usize % remaining);

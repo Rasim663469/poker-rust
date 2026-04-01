@@ -139,25 +139,29 @@ pub(super) fn lobby_hero(
                     .strong()
                     .color(GOLD_SOFT),
             );
-            ui.add_space(10.0);
-            ui.label(
-                egui::RichText::new(body)
-                    .size(17.0)
-                    .color(TEXT_DIM),
-            );
-            ui.add_space(18.0);
-            ui.horizontal(|ui| {
-                response = Some(premium_button(ui, cta_label));
+            if !body.trim().is_empty() {
                 ui.add_space(10.0);
                 ui.label(
-                    egui::RichText::new("Jeux premium, tables classiques et sessions rapides.")
-                        .size(15.0)
+                    egui::RichText::new(body)
+                        .size(17.0)
                         .color(TEXT_DIM),
                 );
-            });
+            }
+            if !cta_label.trim().is_empty() {
+                ui.add_space(18.0);
+                ui.horizontal(|ui| {
+                    response = Some(premium_button(ui, cta_label));
+                    ui.add_space(10.0);
+                    ui.label(
+                        egui::RichText::new("Jeux premium, tables classiques et sessions rapides.")
+                            .size(15.0)
+                            .color(TEXT_DIM),
+                    );
+                });
+            }
         });
     });
-    response.expect("cta button should be rendered")
+    response.unwrap_or_else(|| ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover()))
 }
 
 pub(super) fn premium_button(ui: &mut egui::Ui, label: &str) -> egui::Response {

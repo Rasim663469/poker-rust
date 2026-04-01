@@ -41,6 +41,8 @@ pub struct HiLoHistoryEntry {
 
 #[derive(Clone, Debug)]
 pub struct HiLoConfig {
+    // Cette config permet de faire varier les règles sans toucher au moteur :
+    // gestion de l'As, gains, limites de mise, autorisation du "Equal", etc.
     pub allow_equal: bool,
     pub ace_mode: AceMode,
     pub payout_win: u32,
@@ -63,6 +65,8 @@ impl Default for HiLoConfig {
 }
 
 pub struct HiLoGame {
+    // Le jeu garde ici tout ce qu'il faut pour une manche :
+    // bankroll, mise en cours, carte visible, résultat précédent et historique.
     paquet: Paquet,
     pub jetons: u32,
     pub mise: u32,
@@ -82,6 +86,8 @@ impl HiLoGame {
     }
 
     pub fn new_with_config(jetons_depart: u32, config: HiLoConfig) -> Self {
+        // On prépare un paquet mélangé et on révèle tout de suite une première carte.
+        // Le joueur parie toujours par rapport à une carte déjà visible.
         let mut paquet = Paquet::nouveau();
         paquet.melanger();
         let current = paquet.tirer_carte();
@@ -101,6 +107,8 @@ impl HiLoGame {
     }
 
     pub fn start_round(&mut self, mise: u32) -> Result<(), String> {
+        // Cette étape ne joue pas encore la manche :
+        // elle vérifie juste la mise et place le jeu dans l'état "en attente du choix".
         if self.jetons == 0 {
             return Err("Tu n'as plus de jetons.".to_string());
         }
@@ -135,6 +143,8 @@ impl HiLoGame {
     }
 
     pub fn guess(&mut self, guess: HiLoGuess) -> Result<HiLoOutcome, String> {
+        // Ici on résout toute la manche en une fois :
+        // on tire la carte suivante, on compare, puis on crédite ou débite selon le résultat.
         if self.etat != HiLoState::EnAttenteChoix {
             return Err("Pas de choix attendu.".to_string());
         }
@@ -149,6 +159,8 @@ impl HiLoGame {
 
         let c = card_value(current.valeur, self.config.ace_mode);
         let n = card_value(next.valeur, self.config.ace_mode);
+        // On passe par une valeur numérique simple pour comparer les cartes.
+        // Ça évite de disperser la logique spéciale de l'As partout.
         let tie = n == c;
         let win = if tie {
             guess == HiLoGuess::Equal
@@ -208,6 +220,8 @@ impl HiLoGame {
             tie,
             payout,
         });
+        // On garde un historique court :
+        // suffisant pour l'UI, mais sans faire grossir la structure inutilement.
         if self.history.len() > 20 {
             self.history.remove(0);
         }
@@ -227,6 +241,7 @@ impl HiLoGame {
 }
 
 fn card_value(v: Valeur, ace_mode: AceMode) -> u8 {
+    // L'As est le seul cas qui dépend vraiment des règles choisies.
     match v {
         Valeur::As => match ace_mode {
             AceMode::High => 14,

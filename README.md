@@ -1,4 +1,4 @@
-# Casino Rust - Commandes d’exécution
+# Casino Royale - Commandes d’exécution
 
 Ce projet contient plusieurs binaires Rust :
 
@@ -14,12 +14,18 @@ Ce projet contient plusieurs binaires Rust :
 - Se placer dans le dossier du projet :
   ```bash
   cd poker-rust
-## 2) Lancer l’application GUI (local)
+- Docker
+## 2) Lancer le docker
+```
+docker compose up
+```
+
+## 3) Lancer l’application GUI (local)
 ```bash
 cargo run --bin poker-rust
 ```
 
-## 3) Lancer le mode Poker Online (multijoueur)
+## 4) Lancer le mode Poker Online (multijoueur)
 Étape A - Démarrer le serveur
 Dans un premier terminal:
 ```bash

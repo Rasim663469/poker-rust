@@ -7,6 +7,8 @@ pub enum LoginResultat {
 }
 
 pub(super) struct LoginState {
+    // On garde ici seulement l'état du formulaire.
+    // La vraie session connectée vit ensuite dans CasinoApp.
     pub(super) pseudo: String,
     pub(super) mot_de_passe: String,
     pub(super) inscription: bool,
@@ -30,6 +32,8 @@ impl Default for LoginState {
 
 impl super::CasinoApp {
     pub(super) fn ui_login(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Le résultat d'auth revient depuis un thread séparé.
+        // Dès qu'on le reçoit, on bascule l'app dans un état "connecté".
         if let Some(res) = self
             .login
             .rx
@@ -148,6 +152,8 @@ impl super::CasinoApp {
         self.login.rx = Some(rx);
 
         std::thread::spawn(move || {
+            // L'auth est volontairement faite hors du thread UI :
+            // même si la DB répond lentement, l'interface reste fluide.
             let rt = match tokio::runtime::Runtime::new() {
                 Ok(r) => r,
                 Err(e) => {
