@@ -161,6 +161,9 @@ impl super::CasinoApp {
         });
 
         if reset_table {
+            if let Some(game) = &self.hilo {
+                self.banque_joueur += game.jetons;
+            }
             self.hilo = None;
             self.hilo_last_outcome = None;
             self.hilo_reveal_at = None;

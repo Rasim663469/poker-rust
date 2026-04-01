@@ -5,14 +5,33 @@ use tokio::net::TcpStream;
 
 pub async fn run_poker_client(addr: &str) -> io::Result<()> {
     let mut stream = TcpStream::connect(addr).await?;
-    let pseudo = demander_str("Pseudo: ");
-    send_json(
-        &mut stream,
-        &MessageClient::Connexion {
-            pseudo: if pseudo.is_empty() { "Joueur".to_string() } else { pseudo },
-        },
-    )
-    .await?;
+
+    loop {
+        println!("1) Se connecter (Login)");
+        println!("2) Créer un compte (Inscription)");
+        let choix = demander_str("Choix: ");
+        let pseudo = demander_str("Pseudo: ");
+        let mot_de_passe = demander_str("Mot de passe: ");
+
+        let msg = match choix.trim() {
+            "2" => MessageClient::Inscription { pseudo, mot_de_passe },
+            _   => MessageClient::Login { pseudo, mot_de_passe },
+        };
+        send_json(&mut stream, &msg).await?;
+
+        match recv_json::<MessageServeur, _>(&mut stream).await? {
+            MessageServeur::AuthOk { jetons } => {
+                println!("[OK] Authentifié. Jetons: {jetons}");
+                break;
+            }
+            MessageServeur::AuthEchec { raison } => {
+                println!("[ERREUR] {raison}");
+            }
+            _ => {
+                println!("[ERREUR] Réponse inattendue du serveur.");
+            }
+        }
+    }
 
     loop {
         let msg: MessageServeur = match recv_json(&mut stream).await {
@@ -100,6 +119,7 @@ pub async fn run_poker_client(addr: &str) -> io::Result<()> {
             MessageServeur::Erreur { message } => {
                 println!("[ERREUR] {message}");
             }
+            MessageServeur::AuthOk { .. } | MessageServeur::AuthEchec { .. } => {}
         }
     }
 }

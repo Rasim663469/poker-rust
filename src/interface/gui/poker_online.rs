@@ -10,6 +10,8 @@ use tokio::net::TcpStream;
 pub(super) struct OnlinePokerState {
     pub(super) adresse: String,
     pub(super) pseudo: String,
+    pub(super) mot_de_passe: String,
+    pub(super) inscription: bool,
     pub(super) est_hote: bool,
     pub(super) nb_joueurs: u32,
     pub(super) jetons_depart: u32,
@@ -30,7 +32,9 @@ impl Default for OnlinePokerState {
     fn default() -> Self {
         Self {
             adresse: "127.0.0.1:8080".to_string(),
-            pseudo: "Joueur".to_string(),
+            pseudo: String::new(),
+            mot_de_passe: String::new(),
+            inscription: false,
             est_hote: false,
             nb_joueurs: 2,
             jetons_depart: 1000,
@@ -90,6 +94,15 @@ impl super::CasinoApp {
                     MessageServeur::Erreur { message } => {
                         self.poker_online.logs.push(format!("[ERREUR] {message}"));
                         self.poker_online.statut = message;
+                        self.poker_online.connecte = false;
+                    }
+                    MessageServeur::AuthOk { jetons } => {
+                        self.poker_online.logs.push(format!("[AUTH] Connecté. Jetons: {jetons}"));
+                        self.poker_online.jetons_restants = jetons;
+                    }
+                    MessageServeur::AuthEchec { raison } => {
+                        self.poker_online.logs.push(format!("[AUTH ECHEC] {raison}"));
+                        self.poker_online.statut = raison;
                         self.poker_online.connecte = false;
                     }
                 }
@@ -228,6 +241,8 @@ impl super::CasinoApp {
 
         let adresse = self.poker_online.adresse.clone();
         let pseudo = self.poker_online.pseudo.clone();
+        let mot_de_passe = self.poker_online.mot_de_passe.clone();
+        let inscription = self.poker_online.inscription;
         let est_hote = self.poker_online.est_hote;
         let nb_joueurs = self.poker_online.nb_joueurs;
         let jetons_depart = self.poker_online.jetons_depart;
@@ -257,18 +272,34 @@ impl super::CasinoApp {
                     }
                 };
 
-                let hello = MessageClient::Connexion { pseudo };
-                if send_json(&mut stream, &hello).await.is_err() {
+                let auth_msg = if inscription {
+                    MessageClient::Inscription { pseudo, mot_de_passe }
+                } else {
+                    MessageClient::Login { pseudo, mot_de_passe }
+                };
+
+                if send_json(&mut stream, &auth_msg).await.is_err() {
                     let _ = tx_srv_to_ui.send(MessageServeur::Erreur {
-                        message: "Echec envoi du message de connexion.".to_string(),
+                        message: "Echec envoi du message d'authentification.".to_string(),
                     });
                     return;
                 }
 
-                let _ = tx_srv_to_ui.send(MessageServeur::Bienvenue {
-                    message: "Connecte au serveur.".to_string(),
-                });
-
+                match recv_json::<MessageServeur, _>(&mut stream).await {
+                    Ok(MessageServeur::AuthOk { jetons }) => {
+                        let _ = tx_srv_to_ui.send(MessageServeur::AuthOk { jetons });
+                    }
+                    Ok(MessageServeur::AuthEchec { raison }) => {
+                        let _ = tx_srv_to_ui.send(MessageServeur::AuthEchec { raison });
+                        return;
+                    }
+                    _ => {
+                        let _ = tx_srv_to_ui.send(MessageServeur::Erreur {
+                            message: "Réponse inattendue lors de l'auth.".to_string(),
+                        });
+                        return;
+                    }
+                }
                 loop {
                     let msg: MessageServeur = match recv_json(&mut stream).await {
                         Ok(m) => m,

@@ -1,5 +1,6 @@
 use crate::games::blackjack::engine::JeuBlackjack;
 use crate::games::hilo::AceMode;
+use crate::games::roulette::RouletteResult;
 use eframe::egui;
 use std::sync::mpsc;
 
@@ -7,8 +8,10 @@ mod assets;
 mod blackjack;
 mod draw;
 mod hilo;
+mod login;
 mod poker;
 mod poker_online;
+mod roulette;
 mod slotmachine;
 mod theme;
 
@@ -19,11 +22,14 @@ use self::theme::{apply_casino_theme, game_tile, lobby_hero, panel_frame, sectio
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EcranCasino {
+    Login,
     Menu,
     Poker,
     Blackjack,
     SlotMachine,
     HiLo,
+    Roulette,
+    Depot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,7 +70,11 @@ impl Street {
 
 pub struct CasinoApp {
     ecran: EcranCasino,
+    joueur_pseudo: String,
+    joueur_db_id: Option<i32>,
+    login: LoginState,
     poker_vue: PokerVue,
+    banque_joueur: u32,
     jetons_depart: u32,
     small_blind: u32,
     big_blind: u32,
@@ -78,6 +88,8 @@ pub struct CasinoApp {
     bj_mise_input: u32,
     slot_symbols: [usize; 3],
     slot_result: String,
+    slot_mise: u32,
+    slot_anim: Option<slotmachine::SlotMachineAnim>,
     hilo: Option<crate::games::hilo::HiLoGame>,
     hilo_jetons_depart: u32,
     hilo_mise_input: u32,
@@ -89,13 +101,23 @@ pub struct CasinoApp {
     hilo_max_bet: u32,
     hilo_last_outcome: Option<crate::games::hilo::HiLoOutcome>,
     hilo_reveal_at: Option<std::time::Instant>,
+    roulette_bet: RouletteBetUI,
+    roulette_mise: u32,  // Slider value
+    roulette_mise_en_jeu: u32,  // Actual deducted bet
+    roulette_last_result: Option<RouletteResult>,
+    roulette_anim: Option<roulette::RouletteAnim>,
+    depot_input: u32,
 }
 
 impl Default for CasinoApp {
     fn default() -> Self {
         Self {
-            ecran: EcranCasino::Menu,
+            ecran: EcranCasino::Login,
+            joueur_pseudo: String::new(),
+            joueur_db_id: None,
+            login: LoginState::default(),
             poker_vue: PokerVue::Choix,
+            banque_joueur: 0,
             jetons_depart: 200,
             small_blind: 10,
             big_blind: 20,
@@ -109,6 +131,8 @@ impl Default for CasinoApp {
             bj_mise_input: 20,
             slot_symbols: [0, 1, 2],
             slot_result: String::new(),
+            slot_mise: 10,
+            slot_anim: None,
             hilo: None,
             hilo_jetons_depart: 500,
             hilo_mise_input: 10,
@@ -120,6 +144,12 @@ impl Default for CasinoApp {
             hilo_max_bet: 1000,
             hilo_last_outcome: None,
             hilo_reveal_at: None,
+            roulette_bet: RouletteBetUI::None,
+            roulette_mise: 10,
+            roulette_mise_en_jeu: 0,
+            roulette_last_result: None,
+            roulette_anim: None,
+            depot_input: 100,
         }
     }
 }
@@ -154,9 +184,9 @@ impl eframe::App for CasinoApp {
                 ui.label(
                     egui::RichText::new(match self.ecran {
                     EcranCasino::Menu => "Menu",
-                    EcranCasino::Poker => "Poker jouable en GUI",
-                    EcranCasino::Blackjack => "Blackjack jouable en GUI",
-                    EcranCasino::SlotMachine => "Machine a sous",
+                    EcranCasino::Poker => "Poker Texas Hold'em",
+                    EcranCasino::Blackjack => "Blackjack",
+                    EcranCasino::SlotMachine => "Machine à sous",
                     EcranCasino::HiLo => "Hi-Lo",
                     })
                     .color(TEXT_DIM),
@@ -172,6 +202,8 @@ impl eframe::App for CasinoApp {
             EcranCasino::Blackjack => self.ui_blackjack(ui),
             EcranCasino::SlotMachine => self.ui_slot_machine(ui),
             EcranCasino::HiLo => self.ui_hilo(ui),
+            EcranCasino::Roulette => self.ui_roulette(ui),
+            EcranCasino::Depot => self.ui_depot(ui),
         });
 
         ctx.request_repaint_after(std::time::Duration::from_millis(80));

@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS joueurs (
+    id       SERIAL PRIMARY KEY,
+    pseudo   VARCHAR(64) UNIQUE NOT NULL,
+    password VARCHAR(256) NOT NULL,
+    jetons   INTEGER NOT NULL DEFAULT 1000
+);

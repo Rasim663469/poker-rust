@@ -15,10 +15,25 @@ impl super::CasinoApp {
                 ui.add_space(14.0);
                 if premium_button(ui, "Lancer !").clicked()
                 {
+                    self.banque_joueur -= self.slot_mise;
                     let result = SlotMachine::spin();
-                    self.slot_symbols = result.symbols;
+                    
+                    // Initialiser l'animation
+                    let mut rng = rand::thread_rng();
+                    let duration = std::time::Duration::from_millis(rng.gen_range(1500..=2500));
+                    self.slot_anim = Some(SlotMachineAnim {
+                        start_time: std::time::Instant::now(),
+                        duration,
+                        final_symbols: result.symbols,
+                        current_display: [0, 1, 2],
+                        fixed_count: 0,
+                    });
+                    
+                    // Stocker si c'est un gain
                     self.slot_result = if result.win {
-                        "Jackpot !".to_string()
+                        let gain = self.slot_mise * 10;
+                        self.banque_joueur += gain;
+                        format!("Jackpot ! (+{} €)", gain)
                     } else {
                         "Perdu...".to_string()
                     };

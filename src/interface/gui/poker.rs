@@ -536,6 +536,7 @@ impl super::CasinoApp {
                 }
             });
             if fermer_table {
+                self.banque_joueur += game.hero.jetons;
                 self.poker = None;
             }
             return;
@@ -548,6 +549,7 @@ impl super::CasinoApp {
         });
 
         if fermer_table {
+            self.banque_joueur += game.hero.jetons;
             self.poker = None;
             return;
         }
