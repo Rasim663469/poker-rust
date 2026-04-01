@@ -40,201 +40,185 @@ impl super::CasinoApp {
             _ => egui::Color32::from_rgb(245, 176, 65),
         };
 
+        let total_rect = ui.available_rect_before_wrap();
         let controls_fixed_h = 192.0;
-        let top_area_h = (ui.available_height() - controls_fixed_h - 8.0).max(0.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), top_area_h),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                let zone_w = ui.available_width();
-                let kpi_h = 74.0;
-                let mult_h = 58.0;
-                let info_h = 56.0;
-                let hist_h = 74.0;
-
-                ui.allocate_ui_with_layout(
-                    egui::vec2(zone_w, kpi_h),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.columns(4, |cols| {
-                            ui_crash_indicateur(
-                                &mut cols[0],
-                                "BALANCE",
-                                format!("{:>8.2}", self.crash_solde),
-                                egui::Color32::from_rgb(247, 211, 88),
-                            );
-                            ui_crash_indicateur(
-                                &mut cols[1],
-                                "MISE",
-                                format!("{:>8.2}", self.crash_mise_input),
-                                egui::Color32::from_rgb(93, 173, 226),
-                            );
-                            ui_crash_indicateur(
-                                &mut cols[2],
-                                "MULTIPLICATEUR",
-                                format!("{:>6.2}x", self.crash.multiplicateur),
-                                multiplicateur_accent,
-                            );
-                            ui_crash_indicateur(
-                                &mut cols[3],
-                                "PAYOUT",
-                                format!("{:>8.2}", payout_affiche),
-                                payout_accent,
-                            );
-                        });
-                    },
-                );
-
-                ui.add_space(4.0);
-                let pulsation = if self.crash.est_en_vol() {
-                    0.35 + 0.65 * (anim_t * 6.0).sin().abs()
-                } else {
-                    0.0
-                };
-                let mult_color = match self.crash.etat {
-                    EtatCrash::Explose { .. } => egui::Color32::from_rgb(231, 76, 60),
-                    EtatCrash::Encaisse { .. } => egui::Color32::from_rgb(46, 204, 113),
-                    _ if self.crash.multiplicateur >= 2.0 => egui::Color32::from_rgb(
-                        80,
-                        (200.0 + 55.0 * pulsation) as u8,
-                        (120.0 + 90.0 * pulsation) as u8,
-                    ),
-                    _ => egui::Color32::from_rgb(
-                        (200.0 + 55.0 * pulsation) as u8,
-                        (90.0 + 40.0 * pulsation) as u8,
-                        90,
-                    ),
-                };
-                ui.allocate_ui_with_layout(
-                    egui::vec2(zone_w, mult_h),
-                    egui::Layout::top_down(egui::Align::Center),
-                    |ui| {
-                        ui.label(
-                            egui::RichText::new(format!("{:>6.2}x", self.crash.multiplicateur))
-                                .size(40.0)
-                                .monospace()
-                                .strong()
-                                .color(mult_color),
-                        );
-                    },
-                );
-
-                ui.add_space(4.0);
-                let graph_h = (ui.available_height() - info_h - hist_h - 8.0).max(96.0);
-                let graph_w = zone_w.max(500.0);
-                let (graph_rect, _) =
-                    ui.allocate_exact_size(egui::vec2(graph_w, graph_h), egui::Sense::hover());
-                dessiner_graphique_crash(ui, graph_rect, &self.crash);
-
-                ui.add_space(6.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(zone_w, info_h),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        if !self.crash.message.is_empty() {
-                            ui.add_sized(
-                                [(zone_w - 4.0).max(0.0), 24.0],
-                                egui::Label::new(
-                                    egui::RichText::new(&self.crash.message)
-                                        .size(17.0)
-                                        .strong()
-                                        .color(match self.crash.etat {
-                                            EtatCrash::Explose { .. } => {
-                                                egui::Color32::from_rgb(231, 76, 60)
-                                            }
-                                            EtatCrash::Encaisse { .. } => {
-                                                egui::Color32::from_rgb(46, 204, 113)
-                                            }
-                                            _ => egui::Color32::from_rgb(220, 232, 227),
-                                        }),
-                                )
-                                .truncate(),
-                            );
-                        } else {
-                            ui.add_space(22.0);
-                        }
-
-                        ui.horizontal(|ui| {
-                            if let Some(point) = self.crash.point_crash_revele() {
-                                ui.monospace(format!("Point d'explosion: {:.2}x", point));
-                            }
-                            if !self.crash_ui_erreur.is_empty() {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(231, 76, 60),
-                                    &self.crash_ui_erreur,
-                                );
-                            }
-                        });
-                    },
-                );
-
-                ui.add_space(2.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(zone_w, hist_h),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.group(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Historique (ligne)").strong());
-                                ui.separator();
-                                ui.colored_label(egui::Color32::from_rgb(231, 76, 60), "< 2.00x");
-                                ui.separator();
-                                ui.colored_label(egui::Color32::from_rgb(46, 204, 113), ">= 2.00x");
-                            });
-
-                            egui::ScrollArea::horizontal()
-                                .max_height(38.0)
-                                .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        if self.crash.historique.is_empty() {
-                                            ui.label("Aucune manche terminee");
-                                            return;
-                                        }
-
-                                        for x in self.crash.historique.iter().rev().take(12) {
-                                            let valeur = format_multiplicateur_historique(*x);
-                                            let (stroke, texte) = if *x >= 2.0 {
-                                                (
-                                                    egui::Color32::from_rgb(102, 255, 163),
-                                                    egui::RichText::new(valeur).strong().color(
-                                                        egui::Color32::from_rgb(225, 255, 238),
-                                                    ),
-                                                )
-                                            } else {
-                                                (
-                                                    egui::Color32::from_rgb(255, 142, 142),
-                                                    egui::RichText::new(valeur).strong().color(
-                                                        egui::Color32::from_rgb(255, 232, 232),
-                                                    ),
-                                                )
-                                            };
-
-                                            let badge = crash_button_style(
-                                                texte,
-                                                stroke,
-                                                egui::vec2(84.0, 30.0),
-                                            );
-                                            let _ = ui.add(badge);
-                                        }
-                                    });
-                                });
-                        });
-                    },
-                );
-            },
+        let top_rect = egui::Rect::from_min_max(
+            total_rect.min,
+            egui::pos2(total_rect.right(), total_rect.bottom() - controls_fixed_h - 8.0),
+        );
+        let bottom_rect = egui::Rect::from_min_max(
+            egui::pos2(total_rect.left(), total_rect.bottom() - controls_fixed_h),
+            total_rect.max,
         );
 
-        ui.add_space(6.0);
-        ui.allocate_ui_with_layout(
-            egui::vec2(ui.available_width(), controls_fixed_h),
-            egui::Layout::top_down(egui::Align::Min),
-            |ui| {
-                ui.group(|ui| {
-                    ui.label(
-                        egui::RichText::new("Gestion de la partie")
-                            .strong()
-                            .size(16.0),
-                    );
+        let zone_w = top_rect.width();
+        let kpi_h = 74.0;
+        let mult_h = 58.0;
+        let info_h = 56.0;
+        let hist_h = 74.0;
+
+        let kpi_rect = egui::Rect::from_min_size(top_rect.min, egui::vec2(zone_w, kpi_h));
+        let mult_rect = egui::Rect::from_min_size(
+            kpi_rect.left_bottom() + egui::vec2(0.0, 4.0),
+            egui::vec2(zone_w, mult_h),
+        );
+        let hist_rect = egui::Rect::from_min_max(
+            egui::pos2(top_rect.left(), top_rect.bottom() - hist_h),
+            top_rect.right_bottom(),
+        );
+        let info_rect = egui::Rect::from_min_max(
+            egui::pos2(top_rect.left(), hist_rect.top() - 2.0 - info_h),
+            egui::pos2(top_rect.right(), hist_rect.top() - 2.0),
+        );
+        let graph_rect = egui::Rect::from_min_max(
+            mult_rect.left_bottom() + egui::vec2(0.0, 4.0),
+            egui::pos2(top_rect.right(), info_rect.top() - 6.0),
+        );
+
+        let mut kpi_ui = ui.child_ui(kpi_rect, egui::Layout::top_down(egui::Align::Min), None);
+        let mut mult_ui = ui.child_ui(mult_rect, egui::Layout::top_down(egui::Align::Center), None);
+        let mut graph_ui = ui.child_ui(graph_rect, egui::Layout::top_down(egui::Align::Min), None);
+        let mut info_ui = ui.child_ui(info_rect, egui::Layout::top_down(egui::Align::Min), None);
+        let mut hist_ui = ui.child_ui(hist_rect, egui::Layout::top_down(egui::Align::Min), None);
+        let mut bottom_ui = ui.child_ui(bottom_rect, egui::Layout::top_down(egui::Align::Min), None);
+
+        kpi_ui.columns(4, |cols| {
+            ui_crash_indicateur(
+                &mut cols[0],
+                "BALANCE",
+                format!("{:>8.2}", self.crash_solde),
+                egui::Color32::from_rgb(247, 211, 88),
+            );
+            ui_crash_indicateur(
+                &mut cols[1],
+                "MISE",
+                format!("{:>8.2}", self.crash_mise_input),
+                egui::Color32::from_rgb(93, 173, 226),
+            );
+            ui_crash_indicateur(
+                &mut cols[2],
+                "MULTIPLICATEUR",
+                format!("{:>6.2}x", self.crash.multiplicateur),
+                multiplicateur_accent,
+            );
+            ui_crash_indicateur(
+                &mut cols[3],
+                "PAYOUT",
+                format!("{:>8.2}", payout_affiche),
+                payout_accent,
+            );
+        });
+
+        let pulsation = if self.crash.est_en_vol() {
+            0.35 + 0.65 * (anim_t * 6.0).sin().abs()
+        } else {
+            0.0
+        };
+        let mult_color = match self.crash.etat {
+            EtatCrash::Explose { .. } => egui::Color32::from_rgb(231, 76, 60),
+            EtatCrash::Encaisse { .. } => egui::Color32::from_rgb(46, 204, 113),
+            _ if self.crash.multiplicateur >= 2.0 => egui::Color32::from_rgb(
+                80,
+                (200.0 + 55.0 * pulsation) as u8,
+                (120.0 + 90.0 * pulsation) as u8,
+            ),
+            _ => egui::Color32::from_rgb(
+                (200.0 + 55.0 * pulsation) as u8,
+                (90.0 + 40.0 * pulsation) as u8,
+                90,
+            ),
+        };
+        mult_ui.label(
+            egui::RichText::new(format!("{:>6.2}x", self.crash.multiplicateur))
+                .size(40.0)
+                .monospace()
+                .strong()
+                .color(mult_color),
+        );
+
+        let (g_rect, _) = graph_ui.allocate_exact_size(
+            egui::vec2(graph_rect.width().max(500.0), graph_rect.height()),
+            egui::Sense::hover(),
+        );
+        dessiner_graphique_crash(&mut graph_ui, g_rect, &self.crash);
+
+        if !self.crash.message.is_empty() {
+            info_ui.add_sized(
+                [(zone_w - 4.0).max(0.0), 24.0],
+                egui::Label::new(
+                    egui::RichText::new(&self.crash.message)
+                        .size(17.0)
+                        .strong()
+                        .color(match self.crash.etat {
+                            EtatCrash::Explose { .. } => egui::Color32::from_rgb(231, 76, 60),
+                            EtatCrash::Encaisse { .. } => egui::Color32::from_rgb(46, 204, 113),
+                            _ => egui::Color32::from_rgb(220, 232, 227),
+                        }),
+                )
+                .truncate(),
+            );
+        } else {
+            info_ui.add_space(22.0);
+        }
+
+        info_ui.horizontal(|ui| {
+            if let Some(point) = self.crash.point_crash_revele() {
+                ui.monospace(format!("Point d'explosion: {:.2}x", point));
+            }
+            if !self.crash_ui_erreur.is_empty() {
+                ui.colored_label(egui::Color32::from_rgb(231, 76, 60), &self.crash_ui_erreur);
+            }
+        });
+
+        hist_ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Historique (ligne)").strong());
+                ui.separator();
+                ui.colored_label(egui::Color32::from_rgb(231, 76, 60), "< 2.00x");
+                ui.separator();
+                ui.colored_label(egui::Color32::from_rgb(46, 204, 113), ">= 2.00x");
+            });
+
+            egui::ScrollArea::horizontal()
+                .max_height(38.0)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if self.crash.historique.is_empty() {
+                            ui.label("Aucune manche terminee");
+                            return;
+                        }
+
+                        for x in self.crash.historique.iter().rev().take(12) {
+                            let valeur = format_multiplicateur_historique(*x);
+                            let (stroke, texte) = if *x >= 2.0 {
+                                (
+                                    egui::Color32::from_rgb(102, 255, 163),
+                                    egui::RichText::new(valeur).strong().color(
+                                        egui::Color32::from_rgb(225, 255, 238),
+                                    ),
+                                )
+                            } else {
+                                (
+                                    egui::Color32::from_rgb(255, 142, 142),
+                                    egui::RichText::new(valeur).strong().color(
+                                        egui::Color32::from_rgb(255, 232, 232),
+                                    ),
+                                )
+                            };
+
+                            let badge = crash_button_style(texte, stroke, egui::vec2(84.0, 30.0));
+                            let _ = ui.add(badge);
+                        }
+                    });
+                });
+        });
+
+        bottom_ui.group(|ui| {
+            ui.label(
+                egui::RichText::new("Gestion de la partie")
+                    .strong()
+                    .size(16.0),
+            );
                     ui.add_space(6.0);
 
                     ui.columns(2, |cols| {
@@ -359,8 +343,7 @@ impl super::CasinoApp {
                         });
                     });
                 });
-            },
-        );
+        ui.advance_cursor_after_rect(total_rect); // Prevent outer container from shrinking
     }
 }
 
@@ -455,33 +438,43 @@ fn dessiner_graphique_crash(ui: &mut egui::Ui, rect: egui::Rect, jeu: &JeuCrash)
     );
 
     // Départ à gauche puis course sur toute la largeur.
+    let mult_courant = if jeu.manche_en_cours() { jeu.multiplicateur_vol() } else { 1.0 };
+    let mult_fin = jeu.point_crash_revele().unwrap_or(mult_courant);
+    
+    // Scale X-axis by logarithmic time, Y-axis by multiplier
+    let mult_max_affiche = mult_fin.max(2.5); // Ensure Y-axis shows at least 2.5x initially
+    let time_max = (mult_max_affiche as f64).ln() as f32;
+    let time_courant = (mult_courant as f64).ln() as f32;
+    
+    let progression_x = if time_max > 0.0 {
+        (time_courant / time_max).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
     let x_depart = zone.left() + 10.0;
     let largeur_course = (zone.right() - x_depart - 8.0).max(12.0);
-    let mult_pour_trace = if jeu.manche_en_cours() {
-        jeu.multiplicateur_vol()
-    } else {
-        1.0
-    };
-    let point_fin = jeu
-        .point_crash_revele()
-        .unwrap_or(jeu.multiplicateur_vol().max(2.0))
-        .max(2.0);
-    let ymax = point_fin.max(5.0) as f32;
-    let progression = ((mult_pour_trace as f32 - 1.0) / (ymax - 1.0)).clamp(0.0, 1.0);
-    let x_courant = x_depart + progression * largeur_course;
+    let x_courant = x_depart + progression_x * largeur_course;
 
     let mut points: Vec<egui::Pos2> = Vec::new();
-    let n = ((progression * 140.0).ceil() as usize).max(2);
+    let n = ((progression_x * 140.0).ceil() as usize).max(2);
     for i in 0..n {
-        let t_local = i as f32 / (n - 1) as f32;
-        let t_global = progression * t_local;
-        let x = x_depart + t_local * (x_courant - x_depart);
+        let t_ratio = i as f32 / (n - 1) as f32; // 0.0 to 1.0 along the current curve segment
+        let t_global = progression_x * t_ratio; // 0.0 to progression_x
+        
+        let x = x_depart + t_global * largeur_course;
+        
+        // y is based on e^(t_global * time_max) -> multiplier at this point
+        let mult_at_t = (t_global * time_max).exp();
+        let y_ratio = (mult_at_t - 1.0) / (mult_max_affiche as f32 - 1.0);
+        
         let wobble = if jeu.est_en_vol() {
-            (time * 6.0 + t_global * 12.0).sin() * 0.015 * t_global
+            (time * 6.0 + t_global * 12.0).sin() * 0.012 * t_global
         } else {
             0.0
         };
-        let y = zone.bottom() - (t_global.powf(1.6) + wobble) * zone.height() * 0.86;
+        
+        let y = zone.bottom() - (y_ratio.clamp(0.0, 1.0) + wobble) * zone.height() * 0.86;
         points.push(egui::pos2(x, y));
     }
 
@@ -526,7 +519,11 @@ fn dessiner_graphique_crash(ui: &mut egui::Ui, rect: egui::Rect, jeu: &JeuCrash)
     }
 
     if let Some(fin) = jeu.point_crash_revele() {
-        let ratio = ((fin as f32 - 1.0) / (ymax - 1.0)).clamp(0.0, 1.0);
+        let ratio = if time_max > 0.0 {
+            (((fin as f64).ln() as f32) / time_max).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         let x = x_depart + ratio * largeur_course;
         painter.line_segment(
             [egui::pos2(x, zone.top()), egui::pos2(x, zone.bottom())],

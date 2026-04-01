@@ -277,34 +277,34 @@ impl super::CasinoApp {
             let gap = 8.0;
             let max_grid_w = ui.available_width().min(560.0);
             let cell_size = ((max_grid_w - gap * 4.0) / 5.0).clamp(54.0, 88.0);
-            let grid_size = cell_size * 5.0 + gap * 4.0;
-            let grid_rect_size = egui::vec2(grid_size, grid_size);
+            
             ui.vertical_centered(|ui| {
-                let (grid_rect, _) = ui.allocate_exact_size(grid_rect_size, egui::Sense::hover());
-
                 let mut case_cliquee: Option<(usize, usize)> = None;
 
-                for ligne in 0..5 {
-                    for col in 0..5 {
-                        let x = grid_rect.left() + col as f32 * (cell_size + gap);
-                        let y = grid_rect.top() + ligne as f32 * (cell_size + gap);
-                        let cell_rect = egui::Rect::from_min_size(
-                            egui::pos2(x, y),
-                            egui::vec2(cell_size, cell_size),
-                        );
+                egui::Grid::new("mines_grid")
+                    .spacing(egui::vec2(gap, gap))
+                    .show(ui, |ui| {
+                        for ligne in 0..5 {
+                            for col in 0..5 {
+                                let (rect, resp) = ui.allocate_exact_size(
+                                    egui::vec2(cell_size, cell_size),
+                                    if actif && jeu.grille[ligne][col] == CaseMine::Cachee {
+                                        egui::Sense::click()
+                                    } else {
+                                        egui::Sense::hover()
+                                    },
+                                );
 
-                        let case = jeu.grille[ligne][col];
-                        dessiner_case_mine(ui, cell_rect, case, actif, ligne, col);
+                                let case = jeu.grille[ligne][col];
+                                dessiner_case_mine(ui, rect, case, actif, ligne, col);
 
-                        // Détection clic
-                        if actif && case == CaseMine::Cachee {
-                            let resp = ui.allocate_rect(cell_rect, egui::Sense::click());
-                            if resp.clicked() {
-                                case_cliquee = Some((ligne, col));
+                                if resp.clicked() {
+                                    case_cliquee = Some((ligne, col));
+                                }
                             }
+                            ui.end_row();
                         }
-                    }
-                }
+                    });
 
                 // Appliquer le clic
                 if let Some((l, c)) = case_cliquee {
