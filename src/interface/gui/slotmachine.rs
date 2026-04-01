@@ -1,21 +1,19 @@
 use crate::games::slotmachine::SlotMachine;
 use eframe::egui;
+use super::theme::{back_button, panel_frame, premium_button, GOLD_SOFT, TEXT_DIM};
 
 impl super::CasinoApp {
     pub(super) fn ui_slot_machine(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(40.0);
-        ui.vertical_centered(|ui| {
-            ui.heading("Machine a sous");
-            ui.add_space(20.0);
-            let highlight =
-                self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
-            dessiner_slot_machine(ui, &self.slot_symbols, highlight);
-            ui.add_space(10.0);
-            ui.horizontal(|ui| {
-                ui.add_space(750.0);
-                if ui
-                    .add(egui::Button::new("Lancer !").min_size(egui::vec2(100.0, 40.0)))
-                    .clicked()
+        panel_frame().show(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.heading("Machine a sous");
+                ui.label(egui::RichText::new("Rouleaux premium, style arcade-casino.").color(TEXT_DIM));
+                ui.add_space(20.0);
+                let highlight =
+                    self.slot_symbols[0] == self.slot_symbols[1] && self.slot_symbols[1] == self.slot_symbols[2];
+                dessiner_slot_machine(ui, &self.slot_symbols, highlight);
+                ui.add_space(14.0);
+                if premium_button(ui, "Lancer !").clicked()
                 {
                     let result = SlotMachine::spin();
                     self.slot_symbols = result.symbols;
@@ -25,16 +23,16 @@ impl super::CasinoApp {
                         "Perdu...".to_string()
                     };
                 }
+                ui.add_space(10.0);
+                if highlight {
+                    ui.colored_label(GOLD_SOFT, &self.slot_result);
+                } else {
+                    ui.label(&self.slot_result);
+                }
+                if back_button(ui, "<- Retour menu").clicked() {
+                    self.ecran = super::EcranCasino::Menu;
+                }
             });
-            ui.add_space(10.0);
-            if highlight {
-                ui.colored_label(egui::Color32::from_rgb(255, 215, 0), &self.slot_result);
-            } else {
-                ui.label(&self.slot_result);
-            }
-            if ui.button("<- Retour menu").clicked() {
-                self.ecran = super::EcranCasino::Menu;
-            }
         });
     }
 }
@@ -43,11 +41,11 @@ fn dessiner_slot_machine(ui: &mut egui::Ui, symbols: &[usize; 3], highlight: boo
     static SYMBOLS: [&str; 4] = ["🍒", "🍋", "🔔", "7"];
     let (rect, _response) = ui.allocate_exact_size(egui::vec2(400.0, 140.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 16.0, egui::Color32::from_rgb(40, 40, 40));
+    painter.rect_filled(rect, 22.0, egui::Color32::from_rgb(49, 18, 23));
     painter.rect_stroke(
         rect,
-        16.0,
-        egui::Stroke::new(3.0, egui::Color32::from_rgb(200, 180, 60)),
+        22.0,
+        egui::Stroke::new(3.0, egui::Color32::from_rgb(219, 176, 76)),
         egui::StrokeKind::Outside,
     );
 
@@ -56,9 +54,9 @@ fn dessiner_slot_machine(ui: &mut egui::Ui, symbols: &[usize; 3], highlight: boo
         let y = rect.top() + 30.0;
         let slot_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(60.0, 80.0));
         let color = if highlight {
-            egui::Color32::from_rgb(255, 220, 80)
+            egui::Color32::from_rgb(255, 230, 122)
         } else {
-            egui::Color32::from_rgb(230, 230, 230)
+            egui::Color32::from_rgb(241, 236, 222)
         };
         painter.rect_filled(slot_rect, 12.0, color);
         painter.rect_stroke(

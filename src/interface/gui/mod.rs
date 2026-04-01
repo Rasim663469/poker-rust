@@ -3,15 +3,19 @@ use crate::games::hilo::AceMode;
 use eframe::egui;
 use std::sync::mpsc;
 
+mod assets;
 mod blackjack;
 mod draw;
 mod hilo;
 mod poker;
 mod poker_online;
 mod slotmachine;
+mod theme;
 
+use self::assets::GameAsset;
 use self::poker::PokerGuiGame;
 use self::poker_online::OnlinePokerState;
+use self::theme::{apply_casino_theme, game_tile, lobby_hero, panel_frame, section_title, subpanel_frame, BG_DARK, GOLD_SOFT, TEXT_DIM};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EcranCasino {
@@ -122,6 +126,7 @@ impl Default for CasinoApp {
 
 impl eframe::App for CasinoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        apply_casino_theme(ctx);
         self.pomper_messages_online();
 
         if let Some(p) = &mut self.poker {
@@ -131,21 +136,37 @@ impl eframe::App for CasinoApp {
             bj.avancer_automatique();
         }
 
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
+        egui::TopBottomPanel::top("header")
+            .frame(
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(12, 17, 23))
+                    .inner_margin(egui::Margin::symmetric(18, 14)),
+            )
+            .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Casino Rust");
+                ui.label(
+                    egui::RichText::new("CASINO RUST")
+                        .size(28.0)
+                        .strong()
+                        .color(GOLD_SOFT),
+                );
                 ui.separator();
-                ui.label(match self.ecran {
+                ui.label(
+                    egui::RichText::new(match self.ecran {
                     EcranCasino::Menu => "Menu",
                     EcranCasino::Poker => "Poker jouable en GUI",
                     EcranCasino::Blackjack => "Blackjack jouable en GUI",
                     EcranCasino::SlotMachine => "Machine a sous",
                     EcranCasino::HiLo => "Hi-Lo",
-                });
+                    })
+                    .color(TEXT_DIM),
+                );
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| match self.ecran {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(BG_DARK).inner_margin(egui::Margin::same(18)))
+            .show(ctx, |ui| match self.ecran {
             EcranCasino::Menu => self.ui_menu(ui),
             EcranCasino::Poker => self.ui_poker(ui),
             EcranCasino::Blackjack => self.ui_blackjack(ui),
@@ -159,23 +180,94 @@ impl eframe::App for CasinoApp {
 
 impl CasinoApp {
     fn ui_menu(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(12.0);
-        ui.heading("Menu des jeux");
-        ui.label("Jeux disponibles:");
-        ui.add_space(10.0);
+        let bg = ui.max_rect();
+        let painter = ui.painter();
+        painter.circle_filled(
+            egui::pos2(bg.right() - 180.0, bg.top() + 120.0),
+            180.0,
+            egui::Color32::from_rgba_premultiplied(186, 138, 36, 18),
+        );
+        painter.circle_filled(
+            egui::pos2(bg.left() + 120.0, bg.bottom() - 120.0),
+            160.0,
+            egui::Color32::from_rgba_premultiplied(28, 126, 83, 16),
+        );
 
-        if ui.button("Poker Texas Hold'em").clicked() {
-            self.ecran = EcranCasino::Poker;
-            self.poker_vue = PokerVue::Choix;
+        if lobby_hero(
+            ui,
+            "CASINO RUST",
+            "Entrez dans un lobby pense comme un vrai casino en ligne.",
+            "Tables elegantes, ambiance nocturne, jeux classiques et sessions rapides reunis dans une interface unique, sombre et premium.",
+            "Decouvrir les tables",
+        )
+        .clicked()
+        {
+            ui.scroll_to_cursor(Some(egui::Align::Center));
         }
-        if ui.button("Blackjack").clicked() {
-            self.ecran = EcranCasino::Blackjack;
-        }
-        if ui.button("Machine a sous").clicked() {
-            self.ecran = EcranCasino::SlotMachine;
-        }
-        if ui.button("Hi-Lo").clicked() {
-            self.ecran = EcranCasino::HiLo;
-        }
+
+        ui.add_space(18.0);
+        subpanel_frame().show(ui, |ui| {
+            section_title(ui, "Jeux disponibles", "Selectionne une table et entre dans le salon.");
+        });
+
+        ui.add_space(14.0);
+        ui.columns(2, |columns| {
+            columns[0].vertical(|ui| {
+                if game_tile(
+                    ui,
+                    "Poker Texas Hold'em",
+                    "Solo contre bots ou online multijoueur.",
+                    "TABLE STAR",
+                    egui::Color32::from_rgb(22, 121, 81),
+                    GameAsset::Poker,
+                )
+                .clicked()
+                {
+                    self.ecran = EcranCasino::Poker;
+                    self.poker_vue = PokerVue::Choix;
+                }
+                ui.add_space(78.0);
+                if game_tile(
+                    ui,
+                    "Machine a sous",
+                    "Session rapide avec reels et jackpot.",
+                    "ARCADE",
+                    egui::Color32::from_rgb(200, 134, 36),
+                    GameAsset::Slot,
+                )
+                .clicked()
+                {
+                    self.ecran = EcranCasino::SlotMachine;
+                }
+            });
+
+            columns[1].vertical(|ui| {
+                if game_tile(
+                    ui,
+                    "Blackjack",
+                    "Table multi-joueurs avec bots et croupier.",
+                    "CLASSIQUE",
+                    egui::Color32::from_rgb(176, 42, 51),
+                    GameAsset::Blackjack,
+                )
+                .clicked()
+                {
+                    self.ecran = EcranCasino::Blackjack;
+                }
+                ui.add_space(78.0);
+                if game_tile(
+                    ui,
+                    "Hi-Lo",
+                    "Pari instantane sur la prochaine carte.",
+                    "RAPIDE",
+                    egui::Color32::from_rgb(74, 108, 201),
+                    GameAsset::HiLo,
+                )
+                .clicked()
+                {
+                    self.ecran = EcranCasino::HiLo;
+                }
+            });
+        });
     }
 }

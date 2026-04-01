@@ -1,24 +1,25 @@
 use crate::core::cards::Carte;
 use eframe::egui;
+use super::theme::{ACCENT_RED, GOLD, GOLD_SOFT, TABLE_GREEN_DEEP, TEXT_MAIN};
 
 pub(super) fn dessiner_zone_label(painter: &egui::Painter, rect: egui::Rect, texte: &str) {
     painter.rect_filled(
         rect,
         12.0,
-        egui::Color32::from_rgba_premultiplied(5, 20, 16, 170),
+        egui::Color32::from_rgba_premultiplied(8, 19, 23, 210),
     );
     painter.rect_stroke(
         rect,
         12.0,
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 124, 101)),
+        egui::Stroke::new(1.2, GOLD.gamma_multiply(0.8)),
         egui::StrokeKind::Outside,
     );
     painter.text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
         texte,
-        egui::FontId::proportional(20.0),
-        egui::Color32::from_rgb(220, 232, 227),
+        egui::FontId::proportional(19.0),
+        GOLD_SOFT,
     );
 }
 
@@ -32,12 +33,12 @@ pub(super) fn dessiner_joueur_zone(
     painter.rect_filled(
         rect,
         12.0,
-        egui::Color32::from_rgba_premultiplied(5, 20, 16, 170),
+        egui::Color32::from_rgba_premultiplied(8, 19, 23, 210),
     );
     painter.rect_stroke(
         rect,
         12.0,
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(79, 124, 101)),
+        egui::Stroke::new(1.2, GOLD.gamma_multiply(0.75)),
         egui::StrokeKind::Outside,
     );
     painter.text(
@@ -45,8 +46,78 @@ pub(super) fn dessiner_joueur_zone(
         egui::Align2::LEFT_CENTER,
         format!("{}  |  Stack: {}  |  Mise: {}", nom, jetons, mise_tour),
         egui::FontId::proportional(16.0),
-        egui::Color32::from_rgb(220, 232, 227),
+        TEXT_MAIN,
     );
+}
+
+fn draw_card_image(ui: &mut egui::Ui, painter: &egui::Painter, rect: egui::Rect, card: &Carte) {
+    painter.rect_filled(rect, 10.0, egui::Color32::from_rgb(249, 247, 240));
+    painter.rect_stroke(
+        rect,
+        10.0,
+        egui::Stroke::new(1.2, egui::Color32::from_rgb(96, 83, 49)),
+        egui::StrokeKind::Outside,
+    );
+
+    let image_rect = rect.shrink(3.0);
+    ui.put(
+        image_rect,
+        egui::Image::new(card.image_url_api()).fit_to_exact_size(image_rect.size()),
+    );
+}
+
+fn draw_card_fallback(painter: &egui::Painter, rect: egui::Rect, card: Option<&Carte>, face_up: bool) {
+    if face_up {
+        painter.rect_filled(rect, 10.0, egui::Color32::from_rgb(249, 247, 240));
+        painter.rect_stroke(
+            rect,
+            10.0,
+            egui::Stroke::new(1.2, egui::Color32::from_rgb(96, 83, 49)),
+            egui::StrokeKind::Outside,
+        );
+
+        if let Some(c) = card {
+            let txt = c.to_string();
+            let red = txt.ends_with('C') || txt.ends_with('D');
+            painter.text(
+                rect.left_top() + egui::vec2(8.0, 7.0),
+                egui::Align2::LEFT_TOP,
+                &txt,
+                egui::FontId::proportional(16.0),
+                if red {
+                    ACCENT_RED
+                } else {
+                    egui::Color32::from_rgb(22, 24, 28)
+                },
+            );
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                txt,
+                egui::FontId::proportional(24.0),
+                if red {
+                    ACCENT_RED
+                } else {
+                    egui::Color32::from_rgb(22, 24, 28)
+                },
+            );
+        }
+    } else {
+        painter.rect_filled(rect, 10.0, TABLE_GREEN_DEEP);
+        painter.rect_stroke(
+            rect,
+            10.0,
+            egui::Stroke::new(1.2, GOLD.gamma_multiply(0.9)),
+            egui::StrokeKind::Outside,
+        );
+        painter.rect_filled(rect.shrink(8.0), 7.0, egui::Color32::from_rgb(17, 83, 66));
+        painter.rect_stroke(
+            rect.shrink(14.0),
+            6.0,
+            egui::Stroke::new(1.0, GOLD.gamma_multiply(0.4)),
+            egui::StrokeKind::Outside,
+        );
+    }
 }
 
 pub(super) fn dessiner_carte(
@@ -57,42 +128,13 @@ pub(super) fn dessiner_carte(
     face_up: bool,
 ) {
     if face_up {
-        painter.rect_filled(rect, 8.0, egui::Color32::from_rgb(249, 249, 245));
-        painter.rect_stroke(
-            rect,
-            8.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(74, 74, 80)),
-            egui::StrokeKind::Outside,
-        );
-        if let Some(c) = card {
-            let image_rect = rect.shrink(3.0);
-            ui.put(
-                image_rect,
-                egui::Image::new(c.image_url_api()).fit_to_exact_size(image_rect.size()),
-            );
-            let txt = c.to_string();
-            let red = txt.ends_with('C') || txt.ends_with('D');
-            painter.text(
-                rect.left_top() + egui::vec2(4.0, 3.0),
-                egui::Align2::LEFT_TOP,
-                txt,
-                egui::FontId::proportional(13.0),
-                if red {
-                    egui::Color32::from_rgb(191, 39, 45)
-                } else {
-                    egui::Color32::from_rgb(22, 24, 28)
-                },
-            );
+        if let Some(card) = card {
+            draw_card_image(ui, painter, rect, card);
+        } else {
+            draw_card_fallback(painter, rect, None, true);
         }
     } else {
-        painter.rect_filled(rect, 8.0, egui::Color32::from_rgb(24, 47, 93));
-        painter.rect_stroke(
-            rect,
-            8.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(112, 148, 220)),
-            egui::StrokeKind::Outside,
-        );
-        painter.rect_filled(rect.shrink(8.0), 6.0, egui::Color32::from_rgb(38, 62, 111));
+        draw_card_fallback(painter, rect, card, false);
     }
 }
 
@@ -100,8 +142,8 @@ pub(super) fn dessiner_jetons(painter: &egui::Painter, center: egui::Pos2, n: us
     for i in 0..n {
         let y = center.y - i as f32 * 6.0;
         let c = egui::pos2(center.x, y);
-        painter.circle_filled(c, 12.0, egui::Color32::from_rgb(215, 56, 63));
-        painter.circle_stroke(c, 12.0, egui::Stroke::new(1.5, egui::Color32::WHITE));
+        painter.circle_filled(c, 12.0, ACCENT_RED);
+        painter.circle_stroke(c, 12.0, egui::Stroke::new(1.5, GOLD_SOFT));
         painter.circle_stroke(c, 7.0, egui::Stroke::new(1.0, egui::Color32::WHITE));
     }
 }

@@ -1,11 +1,12 @@
 use crate::games::hilo::{AceMode, HiLoConfig, HiLoGame, HiLoGuess, HiLoState};
 use eframe::egui;
 use super::draw::dessiner_carte;
+use super::theme::{back_button, panel_frame, premium_button, section_title, status_panel, subpanel_frame, TABLE_GREEN};
 
 impl super::CasinoApp {
     pub(super) fn ui_hilo(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("<- Retour menu").clicked() {
+            if back_button(ui, "<- Retour menu").clicked() {
                 self.ecran = super::EcranCasino::Menu;
             }
             ui.separator();
@@ -13,65 +14,65 @@ impl super::CasinoApp {
         });
 
         if self.hilo.is_none() {
-            ui.add_space(12.0);
-            ui.heading("Hi-Lo (Higher / Lower)");
-            ui.label("Regles standard: egalite = perdu (sauf option Equal).");
-            ui.add_space(8.0);
+            panel_frame().show(ui, |ui| {
+                section_title(ui, "Hi-Lo", "Version rapide higher / lower avec options de payout.");
+                ui.add_space(8.0);
 
-            ui.group(|ui| {
-                ui.label("Configuration:");
-                ui.add(
-                    egui::DragValue::new(&mut self.hilo_jetons_depart)
-                        .range(50..=10_000)
-                        .prefix("Jetons depart: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.hilo_min_bet)
-                        .range(1..=10_000)
-                        .prefix("Mise min: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.hilo_max_bet)
-                        .range(self.hilo_min_bet..=50_000)
-                        .prefix("Mise max: "),
-                );
-                ui.add(
-                    egui::DragValue::new(&mut self.hilo_payout_win)
-                        .range(1..=10)
-                        .prefix("Payout win x"),
-                );
-                ui.checkbox(&mut self.hilo_allow_equal, "Autoriser Equal");
-                ui.add_enabled(
-                    self.hilo_allow_equal,
-                    egui::DragValue::new(&mut self.hilo_payout_equal)
-                        .range(2..=20)
-                        .prefix("Payout equal x"),
-                );
-                ui.horizontal(|ui| {
-                    ui.label("As:");
-                    ui.radio_value(&mut self.hilo_ace_mode, AceMode::High, "Haut");
-                    ui.radio_value(&mut self.hilo_ace_mode, AceMode::Low, "Bas");
+                subpanel_frame().show(ui, |ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut self.hilo_jetons_depart)
+                            .range(50..=10_000)
+                            .prefix("Jetons depart: "),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut self.hilo_min_bet)
+                            .range(1..=10_000)
+                            .prefix("Mise min: "),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut self.hilo_max_bet)
+                            .range(self.hilo_min_bet..=50_000)
+                            .prefix("Mise max: "),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut self.hilo_payout_win)
+                            .range(1..=10)
+                            .prefix("Payout win x"),
+                    );
+                    ui.checkbox(&mut self.hilo_allow_equal, "Autoriser Equal");
+                    ui.add_enabled(
+                        self.hilo_allow_equal,
+                        egui::DragValue::new(&mut self.hilo_payout_equal)
+                            .range(2..=20)
+                            .prefix("Payout equal x"),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.label("As:");
+                        ui.radio_value(&mut self.hilo_ace_mode, AceMode::High, "Haut");
+                        ui.radio_value(&mut self.hilo_ace_mode, AceMode::Low, "Bas");
+                    });
                 });
-            });
 
-            ui.add_space(8.0);
-            if ui.button("Creer une table").clicked() {
-                let mut game = HiLoGame::new_with_config(
-                    self.hilo_jetons_depart,
-                    HiLoConfig {
-                        allow_equal: self.hilo_allow_equal,
-                        ace_mode: self.hilo_ace_mode,
-                        payout_win: self.hilo_payout_win,
-                        payout_equal: self.hilo_payout_equal,
-                        min_bet: self.hilo_min_bet,
-                        max_bet: self.hilo_max_bet,
-                    },
-                );
-                if game.config.min_bet > game.config.max_bet {
-                    game.config.max_bet = game.config.min_bet;
+                ui.add_space(8.0);
+                if premium_button(ui, "Creer une table").clicked()
+                {
+                    let mut game = HiLoGame::new_with_config(
+                        self.hilo_jetons_depart,
+                        HiLoConfig {
+                            allow_equal: self.hilo_allow_equal,
+                            ace_mode: self.hilo_ace_mode,
+                            payout_win: self.hilo_payout_win,
+                            payout_equal: self.hilo_payout_equal,
+                            min_bet: self.hilo_min_bet,
+                            max_bet: self.hilo_max_bet,
+                        },
+                    );
+                    if game.config.min_bet > game.config.max_bet {
+                        game.config.max_bet = game.config.min_bet;
+                    }
+                    self.hilo = Some(game);
                 }
-                self.hilo = Some(game);
-            }
+            });
             return;
         }
 
@@ -79,8 +80,11 @@ impl super::CasinoApp {
         let game = self.hilo.as_mut().expect("hilo must be Some here");
 
         ui.separator();
-        ui.label(format!("Jetons: {} | Streak: {}", game.jetons, game.streak));
-        ui.label(&game.message);
+        status_panel(ui, format!("Jetons: {} | Streak: {}", game.jetons, game.streak));
+        ui.add_space(6.0);
+        subpanel_frame().show(ui, |ui| {
+            ui.label(&game.message);
+        });
 
         let table_height = 280.0;
         let table_width = (ui.available_width() - 12.0).max(520.0);
@@ -174,7 +178,7 @@ fn dessiner_table_hilo(
     painter.rect_filled(rect, 18.0, egui::Color32::from_rgb(12, 28, 24));
 
     let table = rect.shrink2(egui::vec2(16.0, 12.0));
-    painter.rect_filled(table, 80.0, egui::Color32::from_rgb(18, 92, 64));
+    painter.rect_filled(table, 80.0, TABLE_GREEN);
     painter.rect_stroke(
         table,
         80.0,
