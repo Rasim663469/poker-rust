@@ -278,38 +278,46 @@ impl super::CasinoApp {
             let max_grid_w = ui.available_width().min(560.0);
             let cell_size = ((max_grid_w - gap * 4.0) / 5.0).clamp(54.0, 88.0);
             
-            ui.vertical_centered(|ui| {
-                let mut case_cliquee: Option<(usize, usize)> = None;
+            let total_grid_w = cell_size * 5.0 + gap * 4.0;
+            let available = ui.available_width();
+            let left_pad = ((available - total_grid_w) / 2.0).max(0.0);
+            ui.horizontal(|ui| {
+                ui.add_space(left_pad);
+                ui.vertical(|ui| {
+                    let mut case_cliquee: Option<(usize, usize)> = None;
 
-                egui::Grid::new("mines_grid")
-                    .spacing(egui::vec2(gap, gap))
-                    .show(ui, |ui| {
-                        for ligne in 0..5 {
-                            for col in 0..5 {
-                                let (rect, resp) = ui.allocate_exact_size(
-                                    egui::vec2(cell_size, cell_size),
-                                    if actif && jeu.grille[ligne][col] == CaseMine::Cachee {
-                                        egui::Sense::click()
-                                    } else {
-                                        egui::Sense::hover()
-                                    },
-                                );
+                    egui::Grid::new("mines_grid")
+                        .spacing(egui::vec2(gap, gap))
+                        .min_col_width(cell_size)
+                        .max_col_width(cell_size)
+                        .show(ui, |ui| {
+                            for ligne in 0..5 {
+                                for col in 0..5 {
+                                    let (rect, resp) = ui.allocate_exact_size(
+                                        egui::vec2(cell_size, cell_size),
+                                        if actif && jeu.grille[ligne][col] == CaseMine::Cachee {
+                                            egui::Sense::click()
+                                        } else {
+                                            egui::Sense::hover()
+                                        },
+                                    );
 
-                                let case = jeu.grille[ligne][col];
-                                dessiner_case_mine(ui, rect, case, actif, ligne, col);
+                                    let case = jeu.grille[ligne][col];
+                                    dessiner_case_mine(ui, rect, case, actif, ligne, col);
 
-                                if resp.clicked() {
-                                    case_cliquee = Some((ligne, col));
+                                    if resp.clicked() {
+                                        case_cliquee = Some((ligne, col));
+                                    }
                                 }
+                                ui.end_row();
                             }
-                            ui.end_row();
-                        }
-                    });
+                        });
 
-                // Appliquer le clic
-                if let Some((l, c)) = case_cliquee {
-                    let _ = jeu.reveler(l, c);
-                }
+                    // Appliquer le clic
+                    if let Some((l, c)) = case_cliquee {
+                        let _ = jeu.reveler(l, c);
+                    }
+                });
             });
 
             est_termine = jeu.est_termine();
@@ -499,11 +507,9 @@ fn dessiner_case_mine(
 
             // Image Diamant
             let img_rect = render_rect.shrink(10.0);
-            ui.put(
-                img_rect,
-                egui::Image::new(egui::include_image!("../../../diamond.png"))
-                    .fit_to_exact_size(img_rect.size()),
-            );
+            egui::Image::new(egui::include_image!("../../../diamond.png"))
+                .fit_to_exact_size(img_rect.size())
+                .paint_at(ui, img_rect);
         }
         CaseMine::MineRevelee => {
             painter.rect_filled(render_rect, 12.0, egui::Color32::from_rgb(146, 43, 33));
@@ -516,11 +522,9 @@ fn dessiner_case_mine(
 
             // Image Bombe
             let img_rect = render_rect.shrink(10.0);
-            ui.put(
-                img_rect,
-                egui::Image::new(egui::include_image!("../../../mines.png"))
-                    .fit_to_exact_size(img_rect.size()),
-            );
+            egui::Image::new(egui::include_image!("../../../mines.png"))
+                .fit_to_exact_size(img_rect.size())
+                .paint_at(ui, img_rect);
         }
         CaseMine::MineMontree => {
             painter.rect_filled(render_rect, 12.0, egui::Color32::from_rgb(60, 20, 20));
@@ -533,10 +537,10 @@ fn dessiner_case_mine(
 
             // Image Bombe transparente
             let img_rect = render_rect.shrink(12.0);
-            let mut img = egui::Image::new(egui::include_image!("../../../mines.png"))
-                .fit_to_exact_size(img_rect.size());
-            img = img.tint(egui::Color32::from_white_alpha(100));
-            ui.put(img_rect, img);
+            egui::Image::new(egui::include_image!("../../../mines.png"))
+                .fit_to_exact_size(img_rect.size())
+                .tint(egui::Color32::from_white_alpha(100))
+                .paint_at(ui, img_rect);
         }
     }
 }
