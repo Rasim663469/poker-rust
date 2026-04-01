@@ -37,6 +37,8 @@ pub struct Carte {
 }
 
 pub struct Paquet {
+    // On utilise un Vec parce qu'un paquet est une collection dont l'ordre change tout le temps :
+    // on mélange, on tire, on retire une carte précise... c'est exactement le bon outil ici.
     pub cartes: Vec<Carte>,
     deck_api_id: Option<String>,
     pile_api_nom: String,
@@ -44,6 +46,8 @@ pub struct Paquet {
 
 impl Paquet {
     pub fn nouveau() -> Self {
+        // with_capacity(52) évite quelques reallocations inutiles :
+        // on connaît déjà la taille d'un paquet standard.
         let mut cartes = Vec::with_capacity(52);
         for &couleur in &[Couleur::Coeur, Couleur::Carreau, Couleur::Trefle, Couleur::Pique] {
             for &valeur in &[
@@ -68,6 +72,8 @@ impl Paquet {
         let deck_api_id = api_creer_deck_id();
         Paquet {
             cartes,
+            // Si l'API distante marche, on s'en sert.
+            // Sinon tout continue en local, donc l'application ne dépend jamais totalement du réseau.
             deck_api_id,
             pile_api_nom: "rust_game".to_string(),
         }
@@ -84,6 +90,8 @@ impl Paquet {
     }
 
     pub fn tirer_carte(&mut self) -> Option<Carte> {
+        // On tente d'abord la source distante si elle est disponible.
+        // En cas d'échec, on retombe immédiatement sur le paquet local.
         if let Some(deck_id) = self.deck_api_id.as_deref() {
             if let Some(carte) = api_tirer_carte(deck_id) {
                 let _ = api_ajouter_a_pile(deck_id, &self.pile_api_nom, &carte.code_api());
@@ -100,6 +108,8 @@ impl Paquet {
 
 impl Valeur {
     pub fn en_u8(self) -> u8 {
+        // Cette forme numérique sert surtout pour comparer les cartes
+        // sans refaire des match plus loin dans les moteurs de jeu.
         match self {
             Valeur::Deux => 2,
             Valeur::Trois => 3,
@@ -160,6 +170,7 @@ impl fmt::Display for Carte {
 
 impl Carte {
     pub fn code_api(&self) -> String {
+        // L'API deckofcards attend des codes courts du style "AS" ou "9H".
         format!("{}{}", valeur_code_api(self.valeur), couleur_code_api(self.couleur))
     }
 

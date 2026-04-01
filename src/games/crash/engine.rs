@@ -42,6 +42,8 @@ impl JeuCrash {
     }
 
     pub fn lancer_tour(&mut self, mise: f64) -> Result<(), String> {
+        // Une manche de crash est simple :
+        // on fige la mise au départ, on tire un point de crash caché, puis on laisse monter le vol.
         if mise <= 0.0 {
             return Err("La mise doit etre superieure a 0.".to_string());
         }
@@ -68,10 +70,8 @@ impl JeuCrash {
         let dt = delta_s.clamp(0.0, 0.25) as f64;
         self.temps_vol += dt;
 
-        // Progression volontairement lisible:
-        // - base lente pour laisser le temps de cash out
-        // - croissance lineaire avec le temps
-        // - acceleration supplementaire seulement apres 20x
+        // On a choisi une montée lisible plutôt qu'une courbe trop brutale :
+        // au début le joueur a le temps de réagir, puis le risque augmente franchement.
         let t = self.temps_vol;
         let vitesse_lineaire = 0.18 + 0.018 * t;
         let boost_20x = if self.multiplicateur_vol >= 20.0 {
@@ -113,6 +113,8 @@ impl JeuCrash {
     }
 
     pub fn encaisser_a(&mut self, multiplicateur_cible: f64) -> Result<f64, String> {
+        // Le cash out verrouille le gain au multiplicateur courant.
+        // Ensuite le vol peut continuer visuellement, mais le résultat du joueur est déjà fixé.
         if self.etat != EtatCrash::EnVol {
             return Err("Aucun vol actif.".to_string());
         }
@@ -158,7 +160,8 @@ impl JeuCrash {
 }
 
 fn tirer_point_crash() -> f64 {
-    // Distribution heavy-tail: beaucoup de petits crashs, rares gros multiplicateurs.
+    // On veut beaucoup de petits crashs et quelques rares très gros multiplicateurs.
+    // C'est ce qui donne au jeu son côté tendu sans rendre les gros scores impossibles.
     let mut rng = rand::thread_rng();
     let u: f64 = rng.gen_range(0.0..0.99);
     let brut = (0.99 / (1.0 - u)).max(1.01);

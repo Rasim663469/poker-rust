@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 enum RangMain {
+    // L'ordre de cet enum sert directement au classement des mains.
+    // Une main avec un rang plus haut gagne automatiquement avant même le départage.
     CarteHaute,
     Paire,
     DoublePaire,
@@ -20,6 +22,8 @@ enum RangMain {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MainEvaluee {
+    // departage contient les valeurs utiles pour comparer deux mains de même rang.
+    // On garde un Vec<u8> car la taille dépend du cas : paire, double paire, couleur, etc.
     rang: RangMain,
     departage: Vec<u8>,
 }
@@ -39,6 +43,8 @@ impl PartialOrd for MainEvaluee {
 }
 
 pub struct Partie {
+    // Cette struct représente une vraie table de Hold'em côté logique métier.
+    // L'interface ou le terminal viennent simplement la piloter.
     pub joueurs: Vec<Joueur>,
     paquet: Paquet,
     cartes_communes: Vec<Carte>,
@@ -50,6 +56,7 @@ pub struct Partie {
 
 impl Partie {
     pub fn nouvelle(noms: Vec<String>, jetons_depart: u32, small_blind: u32, big_blind: u32) -> Self {
+        // Ici on transforme juste une liste de noms en une liste de joueurs prêts à jouer.
         let joueurs = noms
             .into_iter()
             .map(|nom| Joueur::nouveau(nom, jetons_depart))
@@ -66,6 +73,8 @@ impl Partie {
     }
 
     pub fn jouer_session_cli(&mut self) {
+        // Cette boucle enchaîne les mains tant qu'il reste assez de joueurs
+        // et que l'utilisateur veut continuer la session.
         loop {
             if self.nb_joueurs_avec_jetons() < 2 {
                 println!("Session terminee: moins de 2 joueurs ont des jetons.");
@@ -83,6 +92,8 @@ impl Partie {
     }
 
     pub fn jouer_manche_holdem_cli(&mut self) {
+        // On suit ici le déroulé réel du Texas Hold'em :
+        // blinds, pocket cards, preflop, flop, turn, river, puis showdown si besoin.
         self.preparer_manche();
         if self.nb_joueurs_avec_jetons() < 2 {
             return;
@@ -153,6 +164,7 @@ impl Partie {
     }
 
     fn preparer_manche(&mut self) {
+        // Chaque manche repart d'un état propre.
         self.paquet = Paquet::nouveau();
         self.paquet.melanger();
         self.cartes_communes.clear();
@@ -189,6 +201,8 @@ impl Partie {
     }
 
     fn afficher_table(&self, rue: &str) {
+        // On reconstruit l'affichage du board au moment voulu.
+        // Le join donne une sortie terminal simple et lisible.
         let board = self
             .cartes_communes
             .iter()
@@ -218,6 +232,8 @@ impl Partie {
     }
 
     fn prelever_blind(&mut self, idx: usize, montant: u32) -> u32 {
+        // La blind est prélevée directement sur les jetons du joueur,
+        // puis ajoutée à sa mise du tour et au pot total.
         let paye = self.joueurs[idx].jetons.min(montant);
         self.joueurs[idx].jetons -= paye;
         self.joueurs[idx].mise_tour += paye;
@@ -232,6 +248,8 @@ impl Partie {
             return;
         }
 
+        // Ce Vec<bool> dit simplement quels joueurs doivent encore parler.
+        // On n'a pas besoin d'une structure plus lourde ici.
         let mut besoin_action: Vec<bool> = self
             .joueurs
             .iter()
@@ -257,6 +275,8 @@ impl Partie {
             }
 
             let a_payer = (*mise_actuelle).saturating_sub(self.joueurs[idx].mise_tour);
+            // a_payer représente juste l'écart entre la mise actuelle de la table
+            // et ce que ce joueur a déjà engagé.
             println!(
                 "{}: jetons={}, mise ce tour={}, a payer={}",
                 self.joueurs[idx].nom, self.joueurs[idx].jetons, self.joueurs[idx].mise_tour, a_payer
@@ -357,6 +377,8 @@ impl Partie {
     }
 
     fn reinitialiser_mises(&mut self) {
+        // Entre deux rues, on remet seulement les mises du tour à zéro.
+        // Les jetons et le pot, eux, restent bien sûr conservés.
         for j in &mut self.joueurs {
             j.mise_tour = 0;
         }
@@ -384,6 +406,8 @@ impl Partie {
     }
 
     fn showdown(&mut self) {
+        // Le showdown compare tous les joueurs encore en lice
+        // en combinant leurs 2 cartes privées avec les 5 cartes communes.
         let mut meilleurs: Vec<(usize, MainEvaluee)> = Vec::new();
         for (i, j) in self.joueurs.iter().enumerate() {
             if j.couche {
@@ -408,6 +432,8 @@ impl Partie {
 
         let part = self.pot / gagnants.len() as u32;
         let reste = self.pot % gagnants.len() as u32;
+        // S'il y a partage, on coupe le pot équitablement.
+        // Le petit reste va au premier gagnant pour éviter de perdre des jetons "dans le vide".
         for (k, idx) in gagnants.iter().enumerate() {
             self.joueurs[*idx].jetons += part + if k == 0 { reste } else { 0 };
         }
@@ -427,6 +453,8 @@ impl Partie {
 }
 
 pub fn evaluer_holdem_pour_gui(cartes: &[Carte]) -> (u8, Vec<u8>, String) {
+    // Cette fonction sert de pont avec l'interface :
+    // on expose un résultat simple à afficher sans donner tout le type interne.
     let e = evaluer_holdem(cartes);
     (e.rang as u8, e.departage.clone(), nom_rang(e.rang).to_string())
 }
@@ -446,6 +474,8 @@ fn nom_rang(rang: RangMain) -> &'static str {
 }
 
 fn evaluer_holdem(cartes: &[Carte]) -> MainEvaluee {
+    // En Hold'em, on choisit toujours la meilleure combinaison de 5 cartes parmi 7.
+    // Ici on teste donc toutes les combinaisons de 5 pour garder la meilleure.
     let n = cartes.len();
     let mut best = MainEvaluee {
         rang: RangMain::CarteHaute,
@@ -474,6 +504,8 @@ fn evaluer_holdem(cartes: &[Carte]) -> MainEvaluee {
 }
 
 fn evaluer_5(main: &[Carte; 5]) -> MainEvaluee {
+    // Cette fonction fait le vrai classement d'une main de 5 cartes.
+    // Le reste du moteur s'appuie dessus pour trouver la meilleure combinaison possible.
     let mut valeurs: Vec<u8> = main.iter().map(|c| c.valeur.en_u8()).collect();
     valeurs.sort_unstable_by(|a, b| b.cmp(a));
 
@@ -481,6 +513,8 @@ fn evaluer_5(main: &[Carte; 5]) -> MainEvaluee {
     let suite_haute = suite_haute(&valeurs);
 
     let mut freqs: BTreeMap<u8, u8> = BTreeMap::new();
+    // La map sert à compter combien de fois chaque valeur apparaît :
+    // c'est ce qui permet de reconnaître paire, brelan, carré, etc.
     for v in &valeurs {
         *freqs.entry(*v).or_insert(0) += 1;
     }

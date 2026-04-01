@@ -43,6 +43,8 @@ impl JoueurBlackjack {
 }
 
 pub struct JeuBlackjack {
+    // Ce struct porte toute la logique de manche pour le blackjack.
+    // L'interface se contente surtout d'afficher ce qu'il contient.
     paquet: Paquet,
     pub joueurs: Vec<JoueurBlackjack>,
     pub main_croupier: Vec<Carte>,
@@ -88,6 +90,8 @@ impl JeuBlackjack {
     }
 
     pub fn commencer_manche(&mut self, mise_humain: u32) -> Result<(), String> {
+        // On repart proprement à chaque manche :
+        // reset des mains, prélèvement des mises, puis distribution une carte après l'autre.
         if self.jetons_humain() == 0 {
             return Err("Tu n'as plus de jetons.".to_string());
         }
@@ -128,6 +132,8 @@ impl JeuBlackjack {
         }
 
         for _ in 0..2 {
+            // On distribue en tournant joueur par joueur.
+            // C'est plus fidèle au déroulé réel qu'une distribution main par main.
             for i in 0..self.joueurs.len() {
                 if self.joueurs[i].actif() {
                     self.tirer_joueur(i);
@@ -164,8 +170,8 @@ impl JeuBlackjack {
             self.message = "Tu bust (plus de 21).".to_string();
             self.avancer_tour_joueur();
         } else {
+            // Tant qu'il ne dépasse pas 21, le joueur garde la main.
             self.message = format!("Tu tires une carte. Score: {}", score);
-            // En blackjack, le joueur peut continuer a tirer tant qu'il ne bust pas.
         }
     }
 
@@ -179,6 +185,8 @@ impl JeuBlackjack {
     }
 
     pub fn avancer_automatique(&mut self) {
+        // Les bots jouent ici automatiquement jusqu'à rendre la main
+        // ou jusqu'au passage au croupier.
         while self.etat == EtatBlackjack::TourJoueur {
             let Some(idx) = self.joueur_courant else {
                 self.passer_au_croupier();
@@ -267,6 +275,8 @@ impl JeuBlackjack {
     }
 
     fn passer_au_croupier(&mut self) {
+        // Une fois les joueurs terminés, le croupier déroule sa règle fixe,
+        // puis on résout toute la manche en une fois.
         self.etat = EtatBlackjack::TourCroupier;
         self.jouer_croupier();
         self.resoudre_manche();

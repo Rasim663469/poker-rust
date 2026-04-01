@@ -8,12 +8,15 @@ use std::io;
 use tokio::net::{TcpListener, TcpStream};
 
 struct RemotePlayer {
+    // Le serveur garde ici le strict nécessaire pour un joueur distant :
+    // son identité, son stream réseau et son état dans la manche.
     db_id: i32,
     nom: String,
     stream: TcpStream,
     jetons: u32,
     main: Vec<Carte>,
     couche: bool,
+    deconnecte: bool,
     mise_tour: u32,
 }
 
@@ -21,123 +24,154 @@ pub async fn run_poker_server(addr: &str, pool: DbPool) -> io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     println!("Serveur poker en ecoute sur {addr}");
 
-    let (host_id, host_name, host_jetons, host_addr, mut host_stream) = loop {
-        let (mut stream, remote_addr) = listener.accept().await?;
-        match authentifier_joueur(&mut stream, &pool).await {
-            Ok((db_id, nom, jetons)) => break (db_id, nom, jetons, remote_addr, stream),
-            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
-                eprintln!("Connexion fermee trop tot par {remote_addr}, en attente d'un autre client...");
-                continue;
+    loop {
+        // Une fois une session terminée, le serveur ne s'arrête pas :
+        // il revient ici et attend simplement un nouvel hôte.
+        let (host_id, host_name, host_jetons, host_addr, mut host_stream) = loop {
+            let (mut stream, remote_addr) = listener.accept().await?;
+            match authentifier_joueur(&mut stream, &pool).await {
+                Ok((db_id, nom, jetons)) => break (db_id, nom, jetons, remote_addr, stream),
+                Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                    eprintln!("Connexion fermee trop tot par {remote_addr}, en attente d'un autre client...");
+                    continue;
+                }
+                Err(err) => {
+                    eprintln!("Echec authentification depuis {remote_addr}: {err}");
+                    continue;
+                }
             }
-            Err(err) => {
-                eprintln!("Echec authentification depuis {remote_addr}: {err}");
-                continue;
-            }
+        };
+        println!("Hote connecte: {host_name} ({host_addr})");
+
+        if let Err(err) = send_json(&mut host_stream, &MessageServeur::DemanderConfiguration).await {
+            eprintln!("Hote deconnecte avant configuration: {err}");
+            continue;
         }
-    };
-    println!("Hote connecte: {host_name} ({host_addr})");
-
-    send_json(&mut host_stream, &MessageServeur::DemanderConfiguration).await?;
-    let nb_joueurs_cfg = match recv_json::<MessageClient, _>(&mut host_stream).await? {
-        MessageClient::Action(ActionJoueur::ConfigurerPartie { nb_joueurs, .. }) => {
-            nb_joueurs.clamp(2, 6) as usize
-        }
-        _ => 2,
-    };
-
-    let nb_joueurs = nb_joueurs_cfg;
-    println!("Configuration: {nb_joueurs} joueurs.");
-
-    let mut joueurs = Vec::with_capacity(nb_joueurs);
-    joueurs.push(RemotePlayer {
-        db_id: host_id,
-        nom: host_name,
-        stream: host_stream,
-        jetons: host_jetons,
-        main: Vec::new(),
-        couche: false,
-        mise_tour: 0,
-    });
-
-    while joueurs.len() < nb_joueurs {
-        let (mut stream, addr) = listener.accept().await?;
-        let (db_id, pseudo, jetons) = match authentifier_joueur(&mut stream, &pool).await {
-            Ok(auth) => auth,
-            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
-                eprintln!("Connexion fermee trop tot par {addr}, joueur ignore.");
-                continue;
+        let nb_joueurs_cfg = match recv_json::<MessageClient, _>(&mut host_stream).await {
+            Ok(MessageClient::Action(ActionJoueur::ConfigurerPartie { nb_joueurs, .. })) => {
+                nb_joueurs.clamp(2, 6) as usize
             }
+            Ok(_) => 2,
             Err(err) => {
-                eprintln!("Echec authentification depuis {addr}: {err}");
+                eprintln!("Configuration impossible depuis {host_addr}: {err}");
                 continue;
             }
         };
-        println!("Joueur connecte: {pseudo} ({addr})");
-        send_json(
-            &mut stream,
-            &MessageServeur::Bienvenue {
-                message: format!("Bienvenue {pseudo}. En attente de la table..."),
-            },
-        )
-        .await?;
+
+        let nb_joueurs = nb_joueurs_cfg;
+        println!("Configuration: {nb_joueurs} joueurs.");
+
+        let mut joueurs = Vec::with_capacity(nb_joueurs);
         joueurs.push(RemotePlayer {
-            db_id,
-            nom: pseudo,
-            stream,
-            jetons,
+            db_id: host_id,
+            nom: host_name,
+            stream: host_stream,
+            jetons: host_jetons,
             main: Vec::new(),
             couche: false,
+            deconnecte: false,
             mise_tour: 0,
         });
-    }
 
-    broadcast(
-        &mut joueurs,
-        &MessageServeur::Bienvenue {
-            message: "Tous les joueurs sont connectes. Debut de la session.".to_string(),
-        },
-    )
-    .await?;
-
-    let mut dealer_idx = 0usize;
-    let small_blind = 10_u32;
-    let big_blind = 20_u32;
-
-    loop {
-        let actifs = joueurs.iter().filter(|j| j.jetons > 0).count();
-        if actifs < 2 {
-            let gagnant = joueurs
-                .iter()
-                .max_by_key(|j| j.jetons)
-                .map(|j| j.nom.clone())
-                .unwrap_or_else(|| "Personne".to_string());
-            broadcast(
-                &mut joueurs,
-                &MessageServeur::AnnonceAction {
-                    nom: "Serveur".to_string(),
-                    action: format!("Session terminee. Gagnant: {gagnant}"),
+        while joueurs.len() < nb_joueurs {
+            // Tant que la table n'est pas complète, on continue à accepter des connexions.
+            // Une fermeture trop tôt n'est pas dramatique : on ignore juste ce joueur.
+            let (mut stream, addr) = listener.accept().await?;
+            let (db_id, pseudo, jetons) = match authentifier_joueur(&mut stream, &pool).await {
+                Ok(auth) => auth,
+                Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                    eprintln!("Connexion fermee trop tot par {addr}, joueur ignore.");
+                    continue;
+                },
+                Err(err) => {
+                    eprintln!("Echec authentification depuis {addr}: {err}");
+                    continue;
+                }
+            };
+            println!("Joueur connecte: {pseudo} ({addr})");
+            if let Err(err) = send_json(
+                &mut stream,
+                &MessageServeur::Bienvenue {
+                    message: format!("Bienvenue {pseudo}. En attente de la table..."),
                 },
             )
-            .await?;
-            break;
+            .await
+            {
+                eprintln!("Impossible de confirmer la connexion de {pseudo}: {err}");
+                continue;
+            }
+            joueurs.push(RemotePlayer {
+                db_id,
+                nom: pseudo,
+                stream,
+                jetons,
+                main: Vec::new(),
+                couche: false,
+                deconnecte: false,
+                mise_tour: 0,
+            });
         }
 
-        jouer_manche(
+        if let Err(err) = broadcast(
             &mut joueurs,
-            &mut dealer_idx,
-            small_blind,
-            big_blind,
+            &MessageServeur::Bienvenue {
+                message: "Tous les joueurs sont connectes. Debut de la session.".to_string(),
+            },
         )
-        .await?;
-    }
-
-    for j in &joueurs {
-        if let Err(e) = joueur_repo::maj_jetons(&pool, j.db_id, j.jetons as i32).await {
-            eprintln!("Erreur maj jetons pour {}: {e}", j.nom);
+        .await
+        {
+            eprintln!("Impossible d'annoncer le debut de session: {err}");
+            continue;
         }
-    }
 
-    Ok(())
+        let mut dealer_idx = 0usize;
+        let small_blind = 10_u32;
+        let big_blind = 20_u32;
+
+        loop {
+            // La session continue tant qu'il reste au moins deux joueurs encore capables de jouer.
+            let actifs = joueurs
+                .iter()
+                .filter(|j| j.jetons > 0 && !j.deconnecte)
+                .count();
+            if actifs < 2 {
+                let gagnant = joueurs
+                    .iter()
+                    .max_by_key(|j| j.jetons)
+                    .map(|j| j.nom.clone())
+                    .unwrap_or_else(|| "Personne".to_string());
+                let _ = broadcast(
+                    &mut joueurs,
+                    &MessageServeur::AnnonceAction {
+                        nom: "Serveur".to_string(),
+                        action: format!("Session terminee. Gagnant: {gagnant}"),
+                    },
+                )
+                .await;
+                break;
+            }
+
+            if let Err(err) = jouer_manche(
+                &mut joueurs,
+                &mut dealer_idx,
+                small_blind,
+                big_blind,
+            )
+            .await
+            {
+                eprintln!("Erreur pendant la session poker: {err}");
+                break;
+            }
+        }
+
+        for j in &joueurs {
+            if let Err(e) = joueur_repo::maj_jetons(&pool, j.db_id, j.jetons as i32).await {
+                eprintln!("Erreur maj jetons pour {}: {e}", j.nom);
+            }
+        }
+
+        println!("Session terminee. Retour en attente d'un nouvel hote.");
+    }
 }
 
 async fn jouer_manche(
@@ -146,6 +180,8 @@ async fn jouer_manche(
     small_blind: u32,
     big_blind: u32,
 ) -> io::Result<()> {
+    // Cette fonction rejoue une manche complète, mais côté serveur.
+    // La logique poker reste la même, avec en plus la diffusion d'événements vers les clients.
     let mut paquet = Paquet::nouveau();
     paquet.melanger();
     let mut board: Vec<Carte> = Vec::new();
@@ -153,15 +189,17 @@ async fn jouer_manche(
 
     for j in joueurs.iter_mut() {
         j.main.clear();
-        j.couche = j.jetons == 0;
+        j.couche = j.jetons == 0 || j.deconnecte;
         j.mise_tour = 0;
     }
 
     let participants: Vec<usize> = joueurs
         .iter()
         .enumerate()
-        .filter_map(|(i, j)| if j.jetons > 0 { Some(i) } else { None })
+        .filter_map(|(i, j)| if j.jetons > 0 && !j.deconnecte { Some(i) } else { None })
         .collect();
+    // On manipule des indices plutôt que de recopier les joueurs.
+    // C'est pratique pour tourner autour de la table et garder un ordre stable.
     if participants.len() < 2 {
         return Ok(());
     }
@@ -326,7 +364,7 @@ async fn tour_mises(
         let max_total = joueurs[idx].mise_tour + joueurs[idx].jetons;
         let peut_relancer = max_total >= min_raise && joueurs[idx].jetons > to_call;
 
-        send_json(
+        if send_json(
             &mut joueurs[idx].stream,
             &MessageServeur::DemanderAction {
                 to_call,
@@ -334,12 +372,33 @@ async fn tour_mises(
                 jetons_restants: joueurs[idx].jetons,
             },
         )
-        .await?;
+        .await
+        .is_err()
+        {
+            marquer_deconnecte(joueurs, idx);
+            let _ = announce(joueurs, idx, "deconnexion (main abandonnee)".to_string()).await;
+            idx = next_participant(participants, idx);
+            continue;
+        }
 
         let action_msg = recv_json::<MessageClient, _>(&mut joueurs[idx].stream).await;
         let action = match action_msg {
             Ok(MessageClient::Action(a)) => a,
-            _ => ActionJoueur::Fold,
+            Ok(_) => ActionJoueur::Fold,
+            Err(_) => {
+                marquer_deconnecte(joueurs, idx);
+                announce(joueurs, idx, "deconnexion (main abandonnee)".to_string()).await?;
+                idx = next_participant(participants, idx);
+                broadcast(
+                    joueurs,
+                    &MessageServeur::MajTable {
+                        pot: *pot,
+                        cartes_communes: board.to_vec(),
+                    },
+                )
+                .await?;
+                continue;
+            }
         };
 
         match action {
@@ -593,7 +652,18 @@ async fn announce(joueurs: &mut [RemotePlayer], idx: usize, action: String) -> i
 
 async fn broadcast(joueurs: &mut [RemotePlayer], msg: &MessageServeur) -> io::Result<()> {
     for j in joueurs.iter_mut() {
-        send_json(&mut j.stream, msg).await?;
+        if j.deconnecte {
+            continue;
+        }
+        if send_json(&mut j.stream, msg).await.is_err() {
+            j.deconnecte = true;
+            j.couche = true;
+        }
     }
     Ok(())
+}
+
+fn marquer_deconnecte(joueurs: &mut [RemotePlayer], idx: usize) {
+    joueurs[idx].deconnecte = true;
+    joueurs[idx].couche = true;
 }

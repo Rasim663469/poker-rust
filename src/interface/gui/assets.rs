@@ -11,6 +11,7 @@ pub(super) enum GameAsset {
     Diamond,
     Mines,
     Crash,
+    Plane,
 }
 
 impl GameAsset {
@@ -25,6 +26,7 @@ impl GameAsset {
             GameAsset::Diamond => egui::include_image!("../../../assets/diamond.png"),
             GameAsset::Mines => egui::include_image!("../../../assets/Mines1.png"),
             GameAsset::Crash => egui::include_image!("../../../assets/Crash1.png"),
+            GameAsset::Plane => egui::include_image!("../../../assets/avion.png"),
         }
     }
 
