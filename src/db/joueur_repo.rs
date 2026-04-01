@@ -68,3 +68,11 @@ pub async fn maj_jetons(pool: &PgPool, id: i32, jetons: i32) -> Result<(), Strin
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub async fn charger_par_id(pool: &PgPool, id: i32) -> Result<Option<Joueur>, String> {
+    sqlx::query_as::<_, Joueur>("SELECT id, pseudo, jetons FROM joueurs WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())
+}

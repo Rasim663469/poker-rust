@@ -56,8 +56,10 @@ impl super::CasinoApp {
                 ui.add_space(8.0);
                 if premium_button(ui, "Creer une table").clicked()
                 {
+                    let jetons_depart = self.capital_depart_jeu(self.hilo_jetons_depart);
+                    self.hilo_wallet_snapshot = Some(jetons_depart);
                     let mut game = HiLoGame::new_with_config(
-                        self.hilo_jetons_depart,
+                        jetons_depart,
                         HiLoConfig {
                             allow_equal: self.hilo_allow_equal,
                             ace_mode: self.hilo_ace_mode,
@@ -161,12 +163,21 @@ impl super::CasinoApp {
         });
 
         if reset_table {
-            if let Some(game) = &self.hilo {
-                self.banque_joueur += game.jetons;
-            }
             self.hilo = None;
+            self.hilo_wallet_snapshot = None;
             self.hilo_last_outcome = None;
             self.hilo_reveal_at = None;
+        }
+
+        let jetons_sync = self.hilo.as_ref().map(|game| game.jetons);
+        if let Some(jetons) = jetons_sync {
+            let mut snapshot = self.hilo_wallet_snapshot;
+            self.synchroniser_banque_depuis_jeu(
+                &mut snapshot,
+                jetons,
+                "Hi-Lo - Resultat",
+            );
+            self.hilo_wallet_snapshot = snapshot;
         }
     }
 }

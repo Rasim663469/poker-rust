@@ -2898,10 +2898,12 @@ dependencies = [
  "dotenvy",
  "eframe",
  "egui_extras",
+ "hmac",
  "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tokio",
 ]

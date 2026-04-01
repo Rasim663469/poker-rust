@@ -484,8 +484,10 @@ impl super::CasinoApp {
                 ui.add_space(10.0);
                 if premium_button(ui, "Lancer une partie").clicked()
                 {
+                    let jetons_depart = self.capital_depart_jeu(self.jetons_depart);
+                    self.poker_wallet_snapshot = Some(jetons_depart);
                     self.poker = Some(PokerGuiGame::new(
-                        self.jetons_depart,
+                        jetons_depart,
                         self.small_blind,
                         self.big_blind,
                     ));
@@ -535,9 +537,26 @@ impl super::CasinoApp {
                     fermer_table = true;
                 }
             });
+            let hero_jetons = game.hero.jetons;
             if fermer_table {
-                self.banque_joueur += game.hero.jetons;
+                let _ = game;
+                let mut snapshot = self.poker_wallet_snapshot;
+                self.synchroniser_banque_depuis_jeu(
+                    &mut snapshot,
+                    hero_jetons,
+                    "Poker - Resultat",
+                );
+                self.poker_wallet_snapshot = None;
                 self.poker = None;
+            } else {
+                let _ = game;
+                let mut snapshot = self.poker_wallet_snapshot;
+                self.synchroniser_banque_depuis_jeu(
+                    &mut snapshot,
+                    hero_jetons,
+                    "Poker - Resultat",
+                );
+                self.poker_wallet_snapshot = snapshot;
             }
             return;
         }
@@ -549,12 +568,29 @@ impl super::CasinoApp {
         });
 
         if fermer_table {
-            self.banque_joueur += game.hero.jetons;
+            let hero_jetons = game.hero.jetons;
+            let _ = game;
+            let mut snapshot = self.poker_wallet_snapshot;
+            self.synchroniser_banque_depuis_jeu(
+                &mut snapshot,
+                hero_jetons,
+                "Poker - Resultat",
+            );
+            self.poker_wallet_snapshot = None;
             self.poker = None;
             return;
         }
 
         if game.tour != TourJoueur::Hero || !game.besoins_action_hero || game.hero.couche {
+            let hero_jetons = game.hero.jetons;
+            let _ = game;
+            let mut snapshot = self.poker_wallet_snapshot;
+            self.synchroniser_banque_depuis_jeu(
+                &mut snapshot,
+                hero_jetons,
+                "Poker - Resultat",
+            );
+            self.poker_wallet_snapshot = snapshot;
             ui.label(egui::RichText::new("Attends l'action du bot...").color(TEXT_DIM));
             return;
         }
@@ -598,6 +634,16 @@ impl super::CasinoApp {
                 }
             }
         });
+
+        let hero_jetons = game.hero.jetons;
+        let _ = game;
+        let mut snapshot = self.poker_wallet_snapshot;
+        self.synchroniser_banque_depuis_jeu(
+            &mut snapshot,
+            hero_jetons,
+            "Poker - Resultat",
+        );
+        self.poker_wallet_snapshot = snapshot;
     }
 }
 

@@ -13,6 +13,7 @@ pub enum ActionJoueur {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageClient {
     Connexion { pseudo: String },
+    Session { db_id: i32, pseudo: String },
     Login { pseudo: String, mot_de_passe: String },
     Inscription { pseudo: String, mot_de_passe: String },
     Action(ActionJoueur),
@@ -35,4 +36,3 @@ pub enum MessageServeur {
     AuthOk { jetons: u32 },
     AuthEchec { raison: String },
 }
-

@@ -32,9 +32,11 @@ impl super::CasinoApp {
                 ui.add_space(10.0);
                 if premium_button(ui, "Creer table Blackjack").clicked()
                 {
+                    let jetons_depart = self.capital_depart_jeu(self.bj_jetons_depart);
+                    self.blackjack_wallet_snapshot = Some(jetons_depart);
                     self.blackjack = Some(JeuBlackjack::nouveau(
                         self.bj_nb_joueurs as usize,
-                        self.bj_jetons_depart,
+                        jetons_depart,
                     ));
                 }
             });
@@ -103,6 +105,16 @@ impl super::CasinoApp {
                 }
             });
         });
+
+        let jetons_humain = jeu.jetons_humain();
+        let _ = jeu;
+        let mut snapshot = self.blackjack_wallet_snapshot;
+        self.synchroniser_banque_depuis_jeu(
+            &mut snapshot,
+            jetons_humain,
+            "Blackjack - Resultat",
+        );
+        self.blackjack_wallet_snapshot = snapshot;
     }
 }
 

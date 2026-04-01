@@ -2,6 +2,7 @@ use crate::games::roulette::{Roulette, RouletteResult, RouletteColor, EUROPEAN_W
 use crate::games::roulette::engine::{gain_multiplier, RouletteBet};
 use eframe::egui;
 use rand::Rng;
+use super::theme::{back_button, panel_frame, premium_button, section_title, status_panel, subpanel_frame, GOLD_SOFT, TEXT_DIM};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RouletteBetUI {
@@ -25,46 +26,31 @@ pub struct RouletteAnim {
 
 impl super::CasinoApp {
     pub(super) fn ui_roulette(&mut self, ui: &mut egui::Ui) {
-        // Slider de mise (basé sur la banque du joueur)
         ui.horizontal(|ui| {
-            ui.label("Ta mise :");
-            let max_mise = self.banque_joueur.max(1);
-            // Ne remise à jour le clamping que si pas d'animation en cours (sinon le slider change pendant l'animation)
-            if self.roulette_anim.is_none() && self.roulette_mise > max_mise {
-                self.roulette_mise = max_mise;
+            if back_button(ui, "<- Retour menu").clicked() {
+                self.ecran = super::EcranCasino::Menu;
             }
-            if ui.add(egui::Slider::new(&mut self.roulette_mise, 1..=max_mise).text("jetons")).changed() {
-                self.roulette_last_result = None;  // Clear le résultat précédent quand on change la mise
-            }
+            ui.separator();
+            ui.heading("Roulette europeenne");
         });
-        ui.add_space(10.0);
 
-        // Message si pas assez d'argent
+        ui.add_space(8.0);
+        status_panel(
+            ui,
+            format!(
+                "Capital global: {} jetons | Mise selectionnee: {}",
+                self.banque_joueur, self.roulette_mise
+            ),
+        );
+        ui.add_space(8.0);
+
         if self.banque_joueur < self.roulette_mise {
             ui.colored_label(egui::Color32::RED, "Pas assez de jetons !");
         }
 
-        // Bouton Lancer la roue (désactivé si aucune mise ou pas assez d'argent)
-        if ui.add_enabled(self.roulette_bet != RouletteBetUI::None && self.banque_joueur >= self.roulette_mise, egui::Button::new("Lancer la roue !")).clicked() && self.roulette_anim.is_none() {
-            // IMPORTANT: Stocker la mise AVANT de lancer, pour éviter le problème de clamping du slider
-            self.roulette_mise_en_jeu = self.roulette_mise;
-            // Déduire la mise IMMÉDIATEMENT
-            self.banque_joueur -= self.roulette_mise_en_jeu;
-            self.roulette_last_result = None;  // Clear le résultat précédent
-            let result = Roulette::spin();
-            let mut rng = rand::thread_rng();
-            let spins = rng.gen_range(3..=5);
-            let duration = std::time::Duration::from_millis(rng.gen_range(1800..=2500));
-            self.roulette_anim = Some(RouletteAnim {
-                start_time: std::time::Instant::now(),
-                duration,
-                final_number: result.number,
-                total_spins: spins,
-            });
-        }
-
         // Gérer l'animation et afficher le résultat
         let mut highlight = None;
+        let mut credit_to_apply = None;
         if let Some(anim) = &self.roulette_anim {
             let elapsed = anim.start_time.elapsed().as_secs_f32();
             let total = anim.duration.as_secs_f32();
@@ -96,7 +82,7 @@ impl super::CasinoApp {
                 //           Si tu perds, tu récupères 0 (la mise est déjà déduite)
                 if has_won {
                     let total_à_récupérer = (self.roulette_mise_en_jeu as u32) * (1 + gain_net);
-                    self.banque_joueur += total_à_récupérer;
+                    credit_to_apply = Some(total_à_récupérer);
                 }
                 
                 // Stocker le résultat avec le multiplicateur et win flag
@@ -124,82 +110,172 @@ impl super::CasinoApp {
             highlight = self.roulette_last_result.as_ref().map(|r| r.number);
         }
 
+        if let Some(montant) = credit_to_apply {
+            self.crediter_banque_joueur_avec_source(montant, "Roulette - Gain");
+        }
+
         ui.add_space(10.0);
+        panel_frame().show(ui, |ui| {
+            section_title(
+                ui,
+                "Table de roulette",
+                "Selectionne une mise, lance la roue et suis le resultat en direct.",
+            );
+            ui.add_space(12.0);
 
-        // Fond ambiance casino
-        egui::Frame::NONE
-            .fill(egui::Color32::from_rgb(12, 96, 66))  // Vert casino
-            .stroke(egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 150, 100)))
-            .corner_radius(10.0)
-            .inner_margin(10.0)
-            .show(ui, |ui| {
-                // Layout horizontal : Roue à gauche, Tableau à droite
-                ui.horizontal(|ui| {
-                    ui.add_space(50.0);
+            let (table_rect, _) = ui.allocate_exact_size(
+                egui::vec2(ui.available_width(), 560.0),
+                egui::Sense::hover(),
+            );
+            let painter = ui.painter_at(table_rect);
+            painter.rect_filled(
+                table_rect,
+                24.0,
+                egui::Color32::from_rgb(11, 39, 32),
+            );
+            painter.rect_stroke(
+                table_rect,
+                24.0,
+                egui::Stroke::new(2.0, egui::Color32::from_rgb(124, 92, 41)),
+                egui::StrokeKind::Outside,
+            );
+            painter.circle_filled(
+                egui::pos2(table_rect.left() + 180.0, table_rect.top() + 120.0),
+                120.0,
+                egui::Color32::from_rgba_premultiplied(186, 138, 36, 22),
+            );
+            painter.circle_filled(
+                egui::pos2(table_rect.right() - 160.0, table_rect.bottom() - 90.0),
+                100.0,
+                egui::Color32::from_rgba_premultiplied(176, 42, 51, 16),
+            );
 
-                    ui.vertical(|ui| {
-                        let (rect, _) = ui.allocate_exact_size(egui::vec2(340.0, 340.0), egui::Sense::hover());
-                        dessiner_roulette(ui, rect, highlight);
+            let content_rect = table_rect.shrink2(egui::vec2(18.0, 18.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(content_rect), |ui| {
+                ui.columns(2, |columns| {
+                    columns[0].vertical(|ui| {
+                        subpanel_frame().show(ui, |ui| {
+                            ui.set_min_height(500.0);
+                            ui.vertical_centered(|ui| {
+                                ui.label(
+                                    egui::RichText::new("Roue")
+                                        .size(22.0)
+                                        .strong()
+                                        .color(GOLD_SOFT),
+                                );
+                                ui.label(
+                                    egui::RichText::new("Roue europeenne avec surbrillance du numero sorti.")
+                                        .color(TEXT_DIM),
+                                );
+                                ui.add_space(14.0);
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(360.0, 360.0),
+                                    egui::Sense::hover(),
+                                );
+                                dessiner_roulette(ui, rect, highlight);
+                            });
+                        });
                     });
 
-                    ui.add_space(160.0);
+                    columns[1].vertical(|ui| {
+                        subpanel_frame().show(ui, |ui| {
+                            section_title(ui, "Mise", "Le portefeuille global est debite au lancement.");
+                            let max_mise = self.banque_joueur.max(1);
+                            if self.roulette_anim.is_none() && self.roulette_mise > max_mise {
+                                self.roulette_mise = max_mise;
+                            }
+                            if ui
+                                .add(egui::Slider::new(&mut self.roulette_mise, 1..=max_mise).text("jetons"))
+                                .changed()
+                            {
+                                self.roulette_last_result = None;
+                            }
+                            ui.add_space(8.0);
+                            match self.roulette_bet {
+                                RouletteBetUI::Color(RouletteColor::Red) => {
+                                    ui.colored_label(egui::Color32::from_rgb(200, 0, 0), bet_ui_to_display_string(&self.roulette_bet));
+                                }
+                                RouletteBetUI::Color(RouletteColor::Black) => {
+                                    ui.colored_label(egui::Color32::from_rgb(220, 220, 220), bet_ui_to_display_string(&self.roulette_bet));
+                                }
+                                RouletteBetUI::Color(RouletteColor::Green) => {
+                                    ui.colored_label(egui::Color32::from_rgb(0, 180, 0), bet_ui_to_display_string(&self.roulette_bet));
+                                }
+                                _ => {
+                                    ui.label(bet_ui_to_display_string(&self.roulette_bet));
+                                }
+                            }
+                            ui.add_space(12.0);
+                            let peut_lancer = self.roulette_bet != RouletteBetUI::None
+                                && self.banque_joueur >= self.roulette_mise
+                                && self.roulette_anim.is_none();
+                            ui.add_enabled_ui(peut_lancer, |ui| {
+                                if premium_button(ui, "Lancer la roue !").clicked() {
+                                    self.roulette_mise_en_jeu = self.roulette_mise;
+                                    self.debiter_banque_joueur_avec_source(
+                                        self.roulette_mise_en_jeu,
+                                        "Roulette - Mise",
+                                    );
+                                    self.roulette_last_result = None;
+                                    let result = Roulette::spin();
+                                    let mut rng = rand::thread_rng();
+                                    let spins = rng.gen_range(3..=5);
+                                    let duration =
+                                        std::time::Duration::from_millis(rng.gen_range(1800..=2500));
+                                    self.roulette_anim = Some(RouletteAnim {
+                                        start_time: std::time::Instant::now(),
+                                        duration,
+                                        final_number: result.number,
+                                        total_spins: spins,
+                                    });
+                                }
+                            });
+                        });
 
-                    ui.vertical(|ui| {
-                        ui.add_space(50.0);
-                        ui.colored_label(egui::Color32::WHITE, egui::RichText::new("TABLEAU DES MISES :").heading().size(22.0));
-                        dessiner_tableau_mises(ui, &mut self.roulette_bet, &mut self.roulette_last_result);
-                        ui.add_space(50.0);
+                        ui.add_space(10.0);
+                        subpanel_frame().show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("Tableau des mises")
+                                    .size(20.0)
+                                    .strong()
+                                    .color(GOLD_SOFT),
+                            );
+                            ui.label(
+                                egui::RichText::new("Plein, colonnes, douzaines et mises simples.")
+                                    .color(TEXT_DIM),
+                            );
+                            ui.add_space(10.0);
+                            dessiner_tableau_mises(ui, &mut self.roulette_bet, &mut self.roulette_last_result);
+                        });
                     });
                 });
             });
+        });
 
         ui.add_space(10.0);
-
-        // Affichage de la mise
-        match self.roulette_bet {
-            RouletteBetUI::Color(RouletteColor::Red) => {
-                ui.colored_label(egui::Color32::from_rgb(200,0,0), egui::RichText::new(bet_ui_to_display_string(&self.roulette_bet)).heading());
-            }
-            RouletteBetUI::Color(RouletteColor::Black) => {
-                ui.colored_label(egui::Color32::from_rgb(30,30,30), egui::RichText::new(bet_ui_to_display_string(&self.roulette_bet)).heading());
-            }
-            RouletteBetUI::Color(RouletteColor::Green) => {
-                ui.colored_label(egui::Color32::from_rgb(0,180,0), egui::RichText::new(bet_ui_to_display_string(&self.roulette_bet)).heading());
-            }
-            _ => {
-                ui.label(egui::RichText::new(bet_ui_to_display_string(&self.roulette_bet)).heading());
-            }
-        }
-
-        // Affichage du résultat
-        if let Some(result) = &self.roulette_last_result {
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(10.0);
-
-            ui.label(egui::RichText::new(format!("Résultat : {}", result.number)).heading());
-
-            let (txt_resultat, col_resultat) = if result.win {
-                ("GAGNÉ", egui::Color32::from_rgb(0, 153, 255))  // Bleu
+        panel_frame().show(ui, |ui| {
+            section_title(ui, "Resultat", "Lecture immediate du dernier tirage.");
+            if let Some(result) = &self.roulette_last_result {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(format!("Numero sorti: {}", result.number)).size(24.0).strong());
+                let (txt_resultat, col_resultat) = if result.win {
+                    ("GAGNE", egui::Color32::from_rgb(0, 153, 255))
+                } else {
+                    ("PERDU", egui::Color32::from_rgb(255, 153, 0))
+                };
+                ui.colored_label(col_resultat, egui::RichText::new(txt_resultat).size(22.0).strong());
+                if result.win {
+                    let multiplier_display = 1 + result.gain_net;
+                    ui.colored_label(
+                        col_resultat,
+                        format!("Multiplicateur: x{} | Gains recus: {} jetons", multiplier_display, result.total_payout),
+                    );
+                }
             } else {
-                ("PERDU", egui::Color32::from_rgb(255, 153, 0))  // Orange
-            };
-
-            ui.colored_label(col_resultat, egui::RichText::new(txt_resultat).heading());
-
-            // Affichage du multiplicateur et du gain TOTAL (inclus la mise) SEULEMENT si on a gagné
-            if result.win {
-                let multiplier_display = 1 + result.gain_net;
-                ui.add_space(5.0);
-                ui.colored_label(col_resultat, egui::RichText::new(format!("Multiplicateur : x{}", multiplier_display)).heading());
-                ui.colored_label(col_resultat, egui::RichText::new(format!("Gains reçus : {} jetons", result.total_payout)).heading());
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Aucun tirage pour le moment.").color(TEXT_DIM));
             }
-        }
-
-        // Return to menu button (top-left, like blackjack and slotmachine)
-        if ui.button("<- Retour menu").clicked() {
-            self.ecran = super::EcranCasino::Menu;
-        }
+        });
     }
 }
 
