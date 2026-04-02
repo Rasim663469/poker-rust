@@ -1,3 +1,5 @@
+//Version terminal CLI au départ de projet
+
 use crate::core::utils::{demander, demander_u32};
 use crate::games::blackjack::engine::{EtatBlackjack, JeuBlackjack};
 use crate::games::poker::engine::Partie;
