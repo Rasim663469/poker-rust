@@ -376,7 +376,7 @@ impl CasinoApp {
         if lobby_hero(
             ui,
             "CASINO ROYALE",
-            "Tout les gagnants ont déjà joué une fois",
+            "Tous les gagnants ont déjà perdu",
             "",
             "",
         )

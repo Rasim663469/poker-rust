@@ -8,6 +8,8 @@ Ce projet contient plusieurs binaires Rust :
 
 ---
 
+Ancienne version CLI et la version graphique de maintenant sont mélangés
+
 ## 1) Pré-requis
 
 - Rust + Cargo installés
